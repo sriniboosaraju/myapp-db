@@ -4,6 +4,12 @@ image:
   repository: ghcr.io/sriniboosaraju/myapp
   tag: "a4f941f"
   pullPolicy: Always
+
+# Database addon
+database:
+  enabled: true
+  secretName: myapp-db-credentials
+
 service:
   type: LoadBalancer
   port: 80

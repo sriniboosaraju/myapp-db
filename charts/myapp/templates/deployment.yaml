@@ -24,6 +24,36 @@ spec:
         env:
         - name: GIT_COMMIT
           value: "{{ .Values.image.tag }}"
+        - name: PORT
+          value: "3000"
+        {{- if .Values.database.enabled }}
+        # Database environment variables from secret
+        - name: DB_HOST
+          valueFrom:
+            secretKeyRef:
+              name: {{ .Values.database.secretName }}
+              key: DB_HOST
+        - name: DB_PORT
+          valueFrom:
+            secretKeyRef:
+              name: {{ .Values.database.secretName }}
+              key: DB_PORT
+        - name: DB_NAME
+          valueFrom:
+            secretKeyRef:
+              name: {{ .Values.database.secretName }}
+              key: DB_NAME
+        - name: DB_USER
+          valueFrom:
+            secretKeyRef:
+              name: {{ .Values.database.secretName }}
+              key: DB_USER
+        - name: DB_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: {{ .Values.database.secretName }}
+              key: DB_PASSWORD
+        {{- end }}
         {{- if .Values.env }}
         {{- range .Values.env }}
         - name: {{ .name }}

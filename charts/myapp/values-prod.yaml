@@ -3,6 +3,11 @@ replicaCount: 3
 image:
   repository: ghcr.io/sriniboosaraju/myapp
   tag: "004829c"
+
+# Database addon
+database:
+  enabled: true
+  secretName: myapp-db-credentials
   pullPolicy: Always
 service:
   type: LoadBalancer

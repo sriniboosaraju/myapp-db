@@ -13,4 +13,9 @@ service:
     service.beta.kubernetes.io/aws-load-balancer-scheme: "internet-facing"
     service.beta.kubernetes.io/aws-load-balancer-additional-resource-tags: "automation:destroy-date=2026-12-31"
 
+# Database addon configuration
+database:
+  enabled: false
+  secretName: myapp-db-credentials
+
 resources: {}

@@ -1,0 +1,21 @@
+# Copy this file to terraform.tfvars and fill in the values
+
+environment = "dev"
+aws_region  = "us-east-1"
+
+# Network configuration
+vpc_id                  = "vpc-xxxxxxxxxxxxxxxxx"
+private_subnet_ids      = ["subnet-xxxxxxxxxxxxxxxxx", "subnet-yyyyyyyyyyyyyyyyy"]
+app_security_group_ids  = ["sg-xxxxxxxxxxxxxxxxx"]
+
+# Database configuration
+postgres_version    = "15.4"
+db_instance_class   = "db.t3.micro"
+allocated_storage   = 20
+db_name             = "myapp"
+db_username         = "postgres"
+db_password         = "change-this-password"  # Use a strong password or AWS Secrets Manager
+
+# Backup configuration
+backup_retention_period = 7
+skip_final_snapshot     = false
