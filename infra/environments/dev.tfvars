@@ -7,7 +7,7 @@ private_subnet_ids = ["subnet-02ee6e6c8b19a3a7b", "subnet-0013af5c9a372e0f8"]
 app_security_group_ids = ["sg-09dcc0ca1f1cb36fe"]  # EKS ClusterSharedNodeSecurityGroup
 
 # Database configuration
-postgres_version    = "15.4"
+postgres_version    = "15"
 db_instance_class   = "db.t3.micro"
 allocated_storage   = 20
 db_name             = "myapp_dev"
