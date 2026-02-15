@@ -7,6 +7,7 @@ variable "app_name" {
 variable "environment" {
   description = "Environment name (dev, qa, staging, prod)"
   type        = string
+  default     = "dev"
 }
 
 variable "aws_region" {
@@ -18,16 +19,19 @@ variable "aws_region" {
 variable "vpc_id" {
   description = "VPC ID where the database will be created"
   type        = string
+  default     = "vpc-placeholder"
 }
 
 variable "private_subnet_ids" {
   description = "List of private subnet IDs for the database subnet group"
   type        = list(string)
+  default     = ["subnet-placeholder1", "subnet-placeholder2"]
 }
 
 variable "app_security_group_ids" {
   description = "List of security group IDs that can access the database"
   type        = list(string)
+  default     = ["sg-placeholder"]
 }
 
 variable "postgres_version" {
