@@ -84,6 +84,90 @@ jobs:
         git add charts/myapp/values-dev.yaml
         git commit -m "ci: bump dev image tag to ${TAG} [ci skip]" || echo "No changes to commit"
         # Pull latest changes first to avoid conflicts
-        git pull --rebase origin main
-        git push origin HEAD:main
+        git pull --rebase origin dev
+        git push origin HEAD:dev
       # The above uses the default GITHUB_TOKEN that Actions provides for pushing back to the same repo
+
+    - name: Configure AWS Credentials via OIDC
+      uses: aws-actions/configure-aws-credentials@v4
+      with:
+        role-to-assume: ${{ secrets.AWS_ROLE_TO_ASSUME }}
+        aws-region: us-east-1
+        role-session-name: GitHubActions-Deploy-${{ github.run_id }}
+
+    - name: Setup Terraform to get DB outputs
+      uses: hashicorp/setup-terraform@v3
+      with:
+        terraform_version: '1.7.0'
+        terraform_wrapper: false
+
+    - name: Get Database Credentials
+      id: db-creds
+      run: |
+        cd infra
+        terraform init \
+          -backend-config="bucket=${{ secrets.TF_STATE_BUCKET }}" \
+          -backend-config="key=myapp/dev/terraform.tfstate" \
+          -backend-config="region=us-east-1"
+        
+        DB_HOST=$(terraform output -raw db_instance_address)
+        DB_PORT=$(terraform output -raw db_instance_port)
+        DB_NAME=$(terraform output -raw db_instance_name)
+        DB_USER=$(terraform output -raw db_instance_username)
+        DB_SECRET_ARN=$(terraform output -raw db_credentials_secret_arn)
+        
+        # Get password from Secrets Manager
+        DB_PASSWORD=$(aws secretsmanager get-secret-value \
+          --secret-id "${DB_SECRET_ARN}" \
+          --query 'SecretString' \
+          --output text | jq -r '.password')
+        
+        echo "DB_HOST=${DB_HOST}" >> $GITHUB_OUTPUT
+        echo "DB_PORT=${DB_PORT}" >> $GITHUB_OUTPUT
+        echo "DB_NAME=${DB_NAME}" >> $GITHUB_OUTPUT
+        echo "DB_USER=${DB_USER}" >> $GITHUB_OUTPUT
+        echo "::add-mask::${DB_PASSWORD}"
+        echo "DB_PASSWORD=${DB_PASSWORD}" >> $GITHUB_OUTPUT
+
+    - name: Configure kubectl for EKS
+      run: |
+        aws eks update-kubeconfig --name srini-cluster --region us-east-1
+
+    - name: Create namespace if not exists
+      run: |
+        kubectl create namespace myapp-dev --dry-run=client -o yaml | kubectl apply -f -
+
+    - name: Create database credentials secret
+      run: |
+        kubectl create secret generic myapp-db-credentials \
+          --from-literal=DB_HOST="${{ steps.db-creds.outputs.DB_HOST }}" \
+          --from-literal=DB_PORT="${{ steps.db-creds.outputs.DB_PORT }}" \
+          --from-literal=DB_NAME="${{ steps.db-creds.outputs.DB_NAME }}" \
+          --from-literal=DB_USER="${{ steps.db-creds.outputs.DB_USER }}" \
+          --from-literal=DB_PASSWORD="${{ steps.db-creds.outputs.DB_PASSWORD }}" \
+          --namespace=myapp-dev \
+          --dry-run=client -o yaml | kubectl apply -f -
+        
+        kubectl label secret myapp-db-credentials \
+          app=myapp \
+          environment=dev \
+          addon=postgres \
+          --namespace=myapp-dev \
+          --overwrite
+
+    - name: Deploy to Kubernetes using Helm
+      run: |
+        helm upgrade --install myapp ./charts/myapp \
+          --namespace myapp-dev \
+          --values ./charts/myapp/values-dev.yaml \
+          --wait \
+          --timeout 5m
+
+    - name: Deployment Summary
+      run: |
+        echo "## Deployment Complete 🚀" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+        echo "- **Environment**: dev" >> $GITHUB_STEP_SUMMARY
+        echo "- **Image**: ghcr.io/${{ github.repository_owner }}/myapp:${{ steps.vars.outputs.TAG }}" >> $GITHUB_STEP_SUMMARY
+        echo "- **Database**: Connected to ${{ steps.db-creds.outputs.DB_HOST }}" >> $GITHUB_STEP_SUMMARY
+        echo "- **Namespace**: myapp-dev" >> $GITHUB_STEP_SUMMARY
