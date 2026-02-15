@@ -37,7 +37,7 @@ variable "app_security_group_ids" {
 variable "postgres_version" {
   description = "PostgreSQL version"
   type        = string
-  default     = "15.4"
+  default     = "15"
 }
 
 variable "db_instance_class" {
