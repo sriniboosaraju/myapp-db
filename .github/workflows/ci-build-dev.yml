@@ -6,14 +6,31 @@ permissions:
   id-token: write
 
 on:
+  # Run after infrastructure workflow completes (DB created/updated)
+  workflow_run:
+    workflows: ["Infrastructure - Terraform"]
+    types:
+      - completed
+    branches:
+      - dev
+  # Run on app changes (DB already exists)
   push:
     branches:
       - dev
+    paths:
+      - 'app/**'
+      - 'charts/**'
+      - 'deploy/**'
   workflow_dispatch:  # Manual trigger
 
 jobs:
   build-push-update:
     runs-on: ubuntu-latest
+    # Run if: infrastructure succeeded, app changes pushed, or manual trigger
+    if: |
+      github.event_name == 'workflow_dispatch' ||
+      github.event_name == 'push' ||
+      (github.event_name == 'workflow_run' && github.event.workflow_run.conclusion == 'success')
 
     steps:
     - name: Checkout code
