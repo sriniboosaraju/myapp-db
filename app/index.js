@@ -24,8 +24,8 @@ app.get('/', (req, res) => {
     <head>
       <title>My App - User Management</title>
       <style>
-        body { font-family: Arial, sans-serif; max-width: 800px; margin: 50px auto; padding: 20px; }
-        h1 { color: #333; }
+        body { font-family: Arial, sans-serif; max-width: 800px; margin: 50px auto; padding: 20px; background: #1e3a8a; color: #fff; }
+        h1 { color: #fff; }
         .form-group { margin: 15px 0; }
         input { padding: 8px; width: 200px; margin-right: 10px; }
         button { padding: 8px 20px; background: #007bff; color: white; border: none; cursor: pointer; }
