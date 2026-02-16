@@ -2,14 +2,12 @@
 replicaCount: 1
 image:
   repository: ghcr.io/sriniboosaraju/myapp-db
-  tag: "a4f941f"
+  tag: "e29a5ca"
   pullPolicy: Always
-
 # Database addon
 database:
   enabled: true
   secretName: myapp-db-credentials
-
 service:
   type: LoadBalancer
   port: 80
