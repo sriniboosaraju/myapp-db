@@ -2,7 +2,6 @@ const express = require('express');
 const { Pool } = require('pg');
 const app = express();
 const port = process.env.PORT || 3000;
-// Force rebuild after making GHCR public
 
 // PostgreSQL connection pool
 const pool = new Pool({
