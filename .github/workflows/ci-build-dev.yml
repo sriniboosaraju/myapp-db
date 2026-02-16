@@ -6,14 +6,7 @@ permissions:
   id-token: write
 
 on:
-  # Run after infrastructure workflow completes (DB created/updated)
-  workflow_run:
-    workflows: ["Infrastructure - Terraform"]
-    types:
-      - completed
-    branches:
-      - dev
-  # Run on app changes (DB already exists)
+  # Run on app or infrastructure changes
   push:
     branches:
       - dev
@@ -21,16 +14,12 @@ on:
       - 'app/**'
       - 'charts/**'
       - 'deploy/**'
+      - 'infra/**'
   workflow_dispatch:  # Manual trigger
 
 jobs:
   build-push-update:
     runs-on: ubuntu-latest
-    # Run if: infrastructure succeeded, app changes pushed, or manual trigger
-    if: |
-      github.event_name == 'workflow_dispatch' ||
-      github.event_name == 'push' ||
-      (github.event_name == 'workflow_run' && github.event.workflow_run.conclusion == 'success')
 
     steps:
     - name: Checkout code
@@ -101,9 +90,8 @@ jobs:
         terraform_version: '1.7.0'
         terraform_wrapper: false
 
-    - name: Get Database Credentials
+    - name: Check and Provision Database Addon
       id: db-creds
-      continue-on-error: true
       run: |
         cd infra
         terraform init \
@@ -111,13 +99,21 @@ jobs:
           -backend-config="key=myapp-db/dev/terraform.tfstate" \
           -backend-config="region=us-east-1"
         
-        # Check if outputs exist (database has been created)
+        # Check if database already exists
         if ! terraform output db_instance_address &> /dev/null; then
-          echo "Database not yet created. Skipping credential setup."
-          echo "db_exists=false" >> $GITHUB_OUTPUT
-          exit 0
+          echo "📦 Database addon not found. Creating new RDS instance..."
+          
+          # Create the database infrastructure
+          terraform apply \
+            -var-file="environments/dev.tfvars" \
+            -auto-approve
+          
+          echo "✅ Database addon created successfully!"
+        else
+          echo "✅ Database addon found. Using existing instance."
         fi
         
+        # Get database credentials
         DB_HOST=$(terraform output -raw db_instance_address)
         DB_PORT=$(terraform output -raw db_instance_port)
         DB_NAME=$(terraform output -raw db_instance_name)
@@ -130,7 +126,6 @@ jobs:
           --query 'SecretString' \
           --output text | jq -r '.password')
         
-        echo "db_exists=true" >> $GITHUB_OUTPUT
         echo "DB_HOST=${DB_HOST}" >> $GITHUB_OUTPUT
         echo "DB_PORT=${DB_PORT}" >> $GITHUB_OUTPUT
         echo "DB_NAME=${DB_NAME}" >> $GITHUB_OUTPUT
@@ -139,17 +134,14 @@ jobs:
         echo "DB_PASSWORD=${DB_PASSWORD}" >> $GITHUB_OUTPUT
 
     - name: Configure kubectl for EKS
-      if: steps.db-creds.outputs.db_exists == 'true'
       run: |
         aws eks update-kubeconfig --name srini-cluster --region us-east-1
 
     - name: Create namespace if not exists
-      if: steps.db-creds.outputs.db_exists == 'true'
       run: |
         kubectl create namespace myapp-db-dev --dry-run=client -o yaml | kubectl apply -f -
 
     - name: Create database credentials secret
-      if: steps.db-creds.outputs.db_exists == 'true'
       run: |
         kubectl create secret generic myapp-db-credentials \
           --from-literal=DB_HOST="${{ steps.db-creds.outputs.DB_HOST }}" \
@@ -168,7 +160,6 @@ jobs:
           --overwrite
 
     - name: Deploy to Kubernetes using Helm
-      if: steps.db-creds.outputs.db_exists == 'true'
       run: |
         helm upgrade --install myapp-db ./charts/myapp-db \
           --namespace myapp-db-dev \
@@ -177,7 +168,6 @@ jobs:
           --timeout 5m
 
     - name: Deployment Summary
-      if: steps.db-creds.outputs.db_exists == 'true'
       run: |
         echo "## Deployment Complete 🚀" >> $GITHUB_STEP_SUMMARY
         echo "" >> $GITHUB_STEP_SUMMARY
@@ -185,14 +175,3 @@ jobs:
         echo "- **Image**: ghcr.io/${{ github.repository_owner }}/myapp-db:${{ steps.vars.outputs.TAG }}" >> $GITHUB_STEP_SUMMARY
         echo "- **Database**: Connected to ${{ steps.db-creds.outputs.DB_HOST }}" >> $GITHUB_STEP_SUMMARY
         echo "- **Namespace**: myapp-db-dev" >> $GITHUB_STEP_SUMMARY
-
-    - name: Database Not Ready Notice
-      if: steps.db-creds.outputs.db_exists != 'true'
-      run: |
-        echo "## Build Complete ⚠️" >> $GITHUB_STEP_SUMMARY
-        echo "" >> $GITHUB_STEP_SUMMARY
-        echo "- **Image**: ghcr.io/${{ github.repository_owner }}/myapp-db:${{ steps.vars.outputs.TAG }}" >> $GITHUB_STEP_SUMMARY
-        echo "- **Status**: Image built but not deployed" >> $GITHUB_STEP_SUMMARY
-        echo "- **Reason**: Database infrastructure not yet created" >> $GITHUB_STEP_SUMMARY
-        echo "" >> $GITHUB_STEP_SUMMARY
-        echo "Deployment will occur automatically after the Infrastructure workflow completes successfully." >> $GITHUB_STEP_SUMMARY
