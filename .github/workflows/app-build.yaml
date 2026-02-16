@@ -123,7 +123,7 @@ jobs:
         run: |
           terraform init \
             -backend-config="bucket=${{ secrets.TF_STATE_BUCKET }}" \
-            -backend-config="key=myapp/${{ matrix.environment }}/terraform.tfstate" \
+            -backend-config="key=myapp-db/${{ matrix.environment }}/terraform.tfstate" \
             -backend-config="region=${{ env.AWS_REGION }}"
           
           if terraform state list 2>/dev/null | grep -q "aws_db_instance.postgres"; then
@@ -167,7 +167,7 @@ jobs:
 
       - name: Attach database to app
         env:
-          NAMESPACE: myapp-${{ matrix.environment }}
+          NAMESPACE: myapp-db-${{ matrix.environment }}
           DB_HOST: ${{ steps.db-outputs.outputs.db_host }}
           DB_PORT: ${{ steps.db-outputs.outputs.db_port }}
           DB_NAME: ${{ steps.db-outputs.outputs.db_name }}
@@ -195,7 +195,7 @@ jobs:
           
           # Label the secret
           kubectl label secret myapp-db-credentials \
-            app=myapp \
+            app=myapp-db \
             environment=${{ matrix.environment }} \
             addon=postgres \
             --namespace=${NAMESPACE} \
@@ -237,12 +237,12 @@ jobs:
           
           # Update the image tag in values file
           sed -i "s/tag: .*/tag: \"${{ needs.build.outputs.short-sha }}\"/" \
-            charts/myapp/values-${{ matrix.environment }}.yaml
+            charts/myapp-db/values-${{ matrix.environment }}.yaml
           
           # Commit and push changes (optional, if using GitOps)
           # git config --global user.name "github-actions[bot]"
           # git config --global user.email "github-actions[bot]@users.noreply.github.com"
-          # git add charts/myapp/values-${{ matrix.environment }}.yaml
+          # git add charts/myapp-db/values-${{ matrix.environment }}.yaml
           # git commit -m "Update ${{ matrix.environment }} image to ${{ needs.build.outputs.short-sha }}"
           # git push
 
@@ -254,17 +254,17 @@ jobs:
 
       - name: Deploy with Helm
         run: |
-          helm upgrade --install myapp charts/myapp \
-            --namespace myapp-${{ matrix.environment }} \
-            --values charts/myapp/values-${{ matrix.environment }}.yaml \
+          helm upgrade --install myapp-db charts/myapp-db \
+            --namespace myapp-db-${{ matrix.environment }} \
+            --values charts/myapp-db/values-${{ matrix.environment }}.yaml \
             --set image.tag=${{ needs.build.outputs.short-sha }} \
             --wait \
             --timeout 5m
 
       - name: Verify deployment
         run: |
-          kubectl rollout status deployment/myapp \
-            --namespace myapp-${{ matrix.environment }} \
+          kubectl rollout status deployment/myapp-db \
+            --namespace myapp-db-${{ matrix.environment }} \
             --timeout=5m
           
           echo "✅ Application deployed successfully!"
@@ -272,8 +272,8 @@ jobs:
       - name: Get application URL
         id: get-url
         run: |
-          SERVICE_URL=$(kubectl get service myapp \
-            --namespace myapp-${{ matrix.environment }} \
+          SERVICE_URL=$(kubectl get service myapp-db \
+            --namespace myapp-db-${{ matrix.environment }} \
             -o jsonpath='{.status.loadBalancer.ingress[0].hostname}')
           
           if [ -n "$SERVICE_URL" ]; then
@@ -327,7 +327,7 @@ jobs:
         run: |
           terraform init \
             -backend-config="bucket=${{ secrets.TF_STATE_BUCKET }}" \
-            -backend-config="key=myapp/prod/terraform.tfstate" \
+            -backend-config="key=myapp-db/prod/terraform.tfstate" \
             -backend-config="region=${{ env.AWS_REGION }}"
           
           terraform apply -var-file="environments/prod.tfvars" -auto-approve
@@ -349,7 +349,7 @@ jobs:
 
       - name: Attach database to production app
         env:
-          NAMESPACE: myapp-prod
+          NAMESPACE: myapp-db-prod
           DB_HOST: ${{ steps.db-outputs.outputs.db_host }}
           DB_PORT: ${{ steps.db-outputs.outputs.db_port }}
           DB_NAME: ${{ steps.db-outputs.outputs.db_name }}
@@ -373,17 +373,17 @@ jobs:
 
       - name: Deploy to Production
         run: |
-          helm upgrade --install myapp charts/myapp \
-            --namespace myapp-prod \
-            --values charts/myapp/values-prod.yaml \
+          helm upgrade --install myapp-db charts/myapp-db \
+            --namespace myapp-db-prod \
+            --values charts/myapp-db/values-prod.yaml \
             --set image.tag=${{ needs.build.outputs.short-sha }} \
             --wait \
             --timeout 10m
 
       - name: Verify production deployment
         run: |
-          kubectl rollout status deployment/myapp \
-            --namespace myapp-prod \
+          kubectl rollout status deployment/myapp-db \
+            --namespace myapp-db-prod \
             --timeout=10m
           
           echo "✅ Production deployment successful!"

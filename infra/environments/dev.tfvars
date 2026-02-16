@@ -10,7 +10,7 @@ app_security_group_ids = ["sg-09dcc0ca1f1cb36fe"]  # EKS ClusterSharedNodeSecuri
 postgres_version    = "15"
 db_instance_class   = "db.t3.micro"
 allocated_storage   = 20
-db_name             = "myapp_dev"
+db_name             = "myapp_db_dev"
 db_username         = "postgres"
 
 # Backup configuration

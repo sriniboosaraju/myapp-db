@@ -1,22 +1,22 @@
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: {{ include "myapp.fullname" . }}
+  name: {{ include "myapp-db.fullname" . }}
   namespace: {{ .Release.Namespace }}
   labels:
-    app: {{ include "myapp.name" . }}
+    app: {{ include "myapp-db.name" . }}
 spec:
   replicas: {{ .Values.replicaCount }}
   selector:
     matchLabels:
-      app: {{ include "myapp.name" . }}
+      app: {{ include "myapp-db.name" . }}
   template:
     metadata:
       labels:
-        app: {{ include "myapp.name" . }}
+        app: {{ include "myapp-db.name" . }}
     spec:
       containers:
-      - name: myapp
+      - name: myapp-db
         image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
         imagePullPolicy: {{ .Values.image.pullPolicy }}
         ports:

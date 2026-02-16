@@ -1,0 +1,27 @@
+# QA environment overrides
+replicaCount: 2
+image:
+  repository: ghcr.io/sriniboosaraju/myapp-db
+  tag: "bc3334a"
+
+# Database addon
+database:
+  enabled: true
+  secretName: myapp-db-credentials
+  pullPolicy: Always
+service:
+  type: LoadBalancer
+  port: 80
+  annotations:
+    service.beta.kubernetes.io/aws-load-balancer-type: "classic"
+    service.beta.kubernetes.io/aws-load-balancer-scheme: "internet-facing"
+    service.beta.kubernetes.io/aws-load-balancer-additional-resource-tags: "automation:destroy-date=2026-12-31,environment=qa"
+env:
+  - name: NODE_ENV
+    value: "qa"
+  - name: LOG_LEVEL
+    value: "debug"
+  - name: APP_NAME
+    value: "myapp-db-qa"
+  - name: REGION
+    value: "us-east-1"

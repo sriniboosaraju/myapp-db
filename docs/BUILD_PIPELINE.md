@@ -128,14 +128,14 @@ After each run, check:
 - Check environment-specific tfvars file
 
 ### App can't connect to database
-- Verify Kubernetes secret exists: `kubectl get secret myapp-db-credentials -n myapp-dev`
-- Check secret has correct keys: `kubectl describe secret myapp-db-credentials -n myapp-dev`
-- View pod environment: `kubectl exec <pod-name> -n myapp-dev -- env | grep DB_`
+- Verify Kubernetes secret exists: `kubectl get secret myapp-db-credentials -n myapp-db-dev`
+- Check secret has correct keys: `kubectl describe secret myapp-db-credentials -n myapp-db-dev`
+- View pod environment: `kubectl exec <pod-name> -n myapp-db-dev -- env | grep DB_`
 
 ### Deployment fails
-- Check pod logs: `kubectl logs -n myapp-dev -l app=myapp`
+- Check pod logs: `kubectl logs -n myapp-db-dev -l app=myapp-db`
 - Verify image was built: Check GitHub Container Registry
-- Check Helm release: `helm list -n myapp-dev`
+- Check Helm release: `helm list -n myapp-db-dev`
 
 ## Comparing with Akkeris
 

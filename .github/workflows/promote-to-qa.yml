@@ -23,7 +23,7 @@ jobs:
     
     - name: Verify image exists in GHCR
       run: |
-        echo "Verifying image ghcr.io/${{ github.repository_owner }}/myapp:${{ github.event.inputs.tag }} exists"
+        echo "Verifying image ghcr.io/${{ github.repository_owner }}/myapp-db:${{ github.event.inputs.tag }} exists"
         # This step would ideally check if the image exists
     
     - name: Install yq
@@ -35,7 +35,7 @@ jobs:
       run: |
         TAG=${{ github.event.inputs.tag }}
         echo "Promoting image tag $TAG to QA"
-        yq -i ".image.tag = \"${TAG}\"" charts/myapp/values-qa.yaml
+        yq -i ".image.tag = \"${TAG}\"" charts/myapp-db/values-qa.yaml
     
     - name: Commit and push QA values change
       env:
@@ -45,11 +45,11 @@ jobs:
         TAG=${{ github.event.inputs.tag }}
         git config user.name "$GIT_COMMITTER_NAME"
         git config user.email "$GIT_COMMITTER_EMAIL"
-        git add charts/myapp/values-qa.yaml
+        git add charts/myapp-db/values-qa.yaml
         git commit -m "promote: QA to image tag ${TAG} [ci skip]"
         git push origin HEAD:main
     
     - name: Summary
       run: |
         echo "✅ Successfully promoted tag ${{ github.event.inputs.tag }} to QA"
-        echo "ArgoCD will sync the change to myapp-qa namespace"
+        echo "ArgoCD will sync the change to myapp-db-qa namespace"

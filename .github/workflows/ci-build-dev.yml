@@ -57,21 +57,21 @@ jobs:
       with:
         push: true
         tags: |
-          ghcr.io/${{ github.repository_owner }}/myapp:${{ steps.vars.outputs.TAG }}
-          ghcr.io/${{ github.repository_owner }}/myapp:latest
+          ghcr.io/${{ github.repository_owner }}/myapp-db:${{ steps.vars.outputs.TAG }}
+          ghcr.io/${{ github.repository_owner }}/myapp-db:latest
 
         # Context is the app folder
         file: ./app/Dockerfile
         context: ./app
 
-    - name: Update charts/myapp/values-dev.yaml with new tag
+    - name: Update charts/myapp-db/values-dev.yaml with new tag
       run: |
         TAG=${{ steps.vars.outputs.TAG }}
-        echo "Updating image tag to $TAG in charts/myapp/values-dev.yaml"
+        echo "Updating image tag to $TAG in charts/myapp-db/values-dev.yaml"
         sudo wget -qO /usr/local/bin/yq https://github.com/mikefarah/yq/releases/latest/download/yq_linux_amd64
         sudo chmod +x /usr/local/bin/yq
         # Update tag inside values-dev.yaml
-        yq -i ".image.tag = \"${TAG}\"" charts/myapp/values-dev.yaml
+        yq -i ".image.tag = \"${TAG}\"" charts/myapp-db/values-dev.yaml
 
     - name: Commit and push values-dev change
       env:
@@ -81,7 +81,7 @@ jobs:
         TAG=${{ steps.vars.outputs.TAG }}
         git config user.name "$GIT_COMMITTER_NAME"
         git config user.email "$GIT_COMMITTER_EMAIL"
-        git add charts/myapp/values-dev.yaml
+        git add charts/myapp-db/values-dev.yaml
         git commit -m "ci: bump dev image tag to ${TAG} [ci skip]" || echo "No changes to commit"
         # Pull latest changes first to avoid conflicts
         git pull --rebase origin dev
@@ -107,7 +107,7 @@ jobs:
         cd infra
         terraform init \
           -backend-config="bucket=${{ secrets.TF_STATE_BUCKET }}" \
-          -backend-config="key=myapp/dev/terraform.tfstate" \
+          -backend-config="key=myapp-db/dev/terraform.tfstate" \
           -backend-config="region=us-east-1"
         
         DB_HOST=$(terraform output -raw db_instance_address)
@@ -135,7 +135,7 @@ jobs:
 
     - name: Create namespace if not exists
       run: |
-        kubectl create namespace myapp-dev --dry-run=client -o yaml | kubectl apply -f -
+        kubectl create namespace myapp-db-dev --dry-run=client -o yaml | kubectl apply -f -
 
     - name: Create database credentials secret
       run: |
@@ -145,21 +145,21 @@ jobs:
           --from-literal=DB_NAME="${{ steps.db-creds.outputs.DB_NAME }}" \
           --from-literal=DB_USER="${{ steps.db-creds.outputs.DB_USER }}" \
           --from-literal=DB_PASSWORD="${{ steps.db-creds.outputs.DB_PASSWORD }}" \
-          --namespace=myapp-dev \
+          --namespace=myapp-db-dev \
           --dry-run=client -o yaml | kubectl apply -f -
         
         kubectl label secret myapp-db-credentials \
-          app=myapp \
+          app=myapp-db \
           environment=dev \
           addon=postgres \
-          --namespace=myapp-dev \
+          --namespace=myapp-db-dev \
           --overwrite
 
     - name: Deploy to Kubernetes using Helm
       run: |
-        helm upgrade --install myapp ./charts/myapp \
-          --namespace myapp-dev \
-          --values ./charts/myapp/values-dev.yaml \
+        helm upgrade --install myapp-db ./charts/myapp-db \
+          --namespace myapp-db-dev \
+          --values ./charts/myapp-db/values-dev.yaml \
           --wait \
           --timeout 5m
 
@@ -168,6 +168,6 @@ jobs:
         echo "## Deployment Complete 🚀" >> $GITHUB_STEP_SUMMARY
         echo "" >> $GITHUB_STEP_SUMMARY
         echo "- **Environment**: dev" >> $GITHUB_STEP_SUMMARY
-        echo "- **Image**: ghcr.io/${{ github.repository_owner }}/myapp:${{ steps.vars.outputs.TAG }}" >> $GITHUB_STEP_SUMMARY
+        echo "- **Image**: ghcr.io/${{ github.repository_owner }}/myapp-db:${{ steps.vars.outputs.TAG }}" >> $GITHUB_STEP_SUMMARY
         echo "- **Database**: Connected to ${{ steps.db-creds.outputs.DB_HOST }}" >> $GITHUB_STEP_SUMMARY
-        echo "- **Namespace**: myapp-dev" >> $GITHUB_STEP_SUMMARY
+        echo "- **Namespace**: myapp-db-dev" >> $GITHUB_STEP_SUMMARY

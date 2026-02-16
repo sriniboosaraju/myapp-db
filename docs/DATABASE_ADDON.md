@@ -122,15 +122,15 @@ Each environment has its own Terraform variables file:
 
 # 2. Deploy your app (ArgoCD will sync automatically)
 # Or manually:
-helm upgrade --install myapp charts/myapp \
-  --namespace myapp-dev \
-  --values charts/myapp/values-dev.yaml
+helm upgrade --install myapp-db charts/myapp-db \
+  --namespace myapp-db-dev \
+  --values charts/myapp-db/values-dev.yaml
 
 # 3. Test the connection
 kubectl run psql-test --rm -it \
   --image=postgres:15 \
-  --namespace=myapp-dev \
-  -- psql -h <DB_HOST> -U postgres -d myapp_dev
+  --namespace=myapp-db-dev \
+  -- psql -h <DB_HOST> -U postgres -d myapp-db_dev
 ```
 
 ### CI/CD Integration
@@ -144,7 +144,7 @@ The addon script can be integrated into your CI/CD pipeline:
   
 - name: Deploy Application
   run: |
-    argocd app sync myapp-${{ env.ENVIRONMENT }}
+    argocd app sync myapp-db-${{ env.ENVIRONMENT }}
 ```
 
 ## Troubleshooting
@@ -158,19 +158,19 @@ The addon script can be integrated into your CI/CD pipeline:
 ### Verify Kubernetes secret
 
 ```bash
-kubectl get secret myapp-db-credentials -n myapp-dev -o yaml
+kubectl get secret myapp-db-credentials -n myapp-db-dev -o yaml
 ```
 
 ### View secret values
 
 ```bash
-kubectl get secret myapp-db-credentials -n myapp-dev -o jsonpath='{.data.DB_HOST}' | base64 -d
+kubectl get secret myapp-db-credentials -n myapp-db-dev -o jsonpath='{.data.DB_HOST}' | base64 -d
 ```
 
 ### Test database connection from pod
 
 ```bash
-kubectl exec -it <pod-name> -n myapp-dev -- env | grep DB_
+kubectl exec -it <pod-name> -n myapp-db-dev -- env | grep DB_
 ```
 
 ### Manual connection test
@@ -178,11 +178,11 @@ kubectl exec -it <pod-name> -n myapp-dev -- env | grep DB_
 ```bash
 kubectl run psql-test --rm -it \
   --image=postgres:15 \
-  --namespace=myapp-dev \
-  --env="PGPASSWORD=$(kubectl get secret myapp-db-credentials -n myapp-dev -o jsonpath='{.data.DB_PASSWORD}' | base64 -d)" \
-  -- psql -h $(kubectl get secret myapp-db-credentials -n myapp-dev -o jsonpath='{.data.DB_HOST}' | base64 -d) \
+  --namespace=myapp-db-dev \
+  --env="PGPASSWORD=$(kubectl get secret myapp-db-credentials -n myapp-db-dev -o jsonpath='{.data.DB_PASSWORD}' | base64 -d)" \
+  -- psql -h $(kubectl get secret myapp-db-credentials -n myapp-db-dev -o jsonpath='{.data.DB_HOST}' | base64 -d) \
        -U postgres \
-       -d myapp_dev
+       -d myapp-db_dev
 ```
 
 ## Security Best Practices
@@ -237,4 +237,4 @@ Modify the Terraform configuration to support multiple database instances or use
 For issues or questions:
 1. Check the logs: `./scripts/addon-db.sh dev info`
 2. Review Terraform state: `cd infra && terraform show`
-3. Check Kubernetes events: `kubectl get events -n myapp-dev`
+3. Check Kubernetes events: `kubectl get events -n myapp-db-dev`

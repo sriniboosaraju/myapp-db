@@ -1,7 +1,7 @@
-# Staging environment overrides
-replicaCount: 2
+# Production environment overrides
+replicaCount: 3
 image:
-  repository: ghcr.io/sriniboosaraju/myapp
+  repository: ghcr.io/sriniboosaraju/myapp-db
   tag: "004829c"
 
 # Database addon
@@ -15,13 +15,20 @@ service:
   annotations:
     service.beta.kubernetes.io/aws-load-balancer-type: "nlb"
     service.beta.kubernetes.io/aws-load-balancer-scheme: "internet-facing"
-    service.beta.kubernetes.io/aws-load-balancer-additional-resource-tags: "automation:destroy-date=2026-12-31,environment=staging"
+    service.beta.kubernetes.io/aws-load-balancer-additional-resource-tags: "automation:destroy-date=2027-12-31,environment=production"
 env:
   - name: NODE_ENV
-    value: "staging"
+    value: "production"
   - name: LOG_LEVEL
-    value: "info"
+    value: "warn"
   - name: APP_NAME
-    value: "myapp-staging"
+    value: "myapp-db-prod"
   - name: REGION
     value: "us-east-1"
+resources:
+  requests:
+    memory: "128Mi"
+    cpu: "200m"
+  limits:
+    memory: "256Mi"
+    cpu: "500m"

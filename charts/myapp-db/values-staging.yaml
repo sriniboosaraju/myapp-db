@@ -1,8 +1,8 @@
-# QA environment overrides
+# Staging environment overrides
 replicaCount: 2
 image:
-  repository: ghcr.io/sriniboosaraju/myapp
-  tag: "bc3334a"
+  repository: ghcr.io/sriniboosaraju/myapp-db
+  tag: "004829c"
 
 # Database addon
 database:
@@ -13,15 +13,15 @@ service:
   type: LoadBalancer
   port: 80
   annotations:
-    service.beta.kubernetes.io/aws-load-balancer-type: "classic"
+    service.beta.kubernetes.io/aws-load-balancer-type: "nlb"
     service.beta.kubernetes.io/aws-load-balancer-scheme: "internet-facing"
-    service.beta.kubernetes.io/aws-load-balancer-additional-resource-tags: "automation:destroy-date=2026-12-31,environment=qa"
+    service.beta.kubernetes.io/aws-load-balancer-additional-resource-tags: "automation:destroy-date=2026-12-31,environment=staging"
 env:
   - name: NODE_ENV
-    value: "qa"
+    value: "staging"
   - name: LOG_LEVEL
-    value: "debug"
+    value: "info"
   - name: APP_NAME
-    value: "myapp-qa"
+    value: "myapp-db-staging"
   - name: REGION
     value: "us-east-1"

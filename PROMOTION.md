@@ -20,7 +20,7 @@ git push origin main
 ```
 
 ### 2. Promote to QA
-1. Go to: https://github.com/sriniboosaraju/myapp/actions
+1. Go to: https://github.com/sriniboosaraju/myapp-db/actions
 2. Run **"Promote to QA"** workflow
 3. Enter Git SHA from Dev (e.g., `abc1234`)
 
@@ -37,7 +37,7 @@ git push origin main
 
 ```bash
 # From Dev deployment
-cat charts/myapp/values-dev.yaml | grep tag
+cat charts/myapp-db/values-dev.yaml | grep tag
 
 # From Git history
 git log --oneline -5
@@ -47,14 +47,14 @@ git log --oneline -5
 
 ```bash
 # Create namespaces
-kubectl create namespace myapp-qa
-kubectl create namespace myapp-staging
-kubectl create namespace myapp-prod
+kubectl create namespace myapp-db-qa
+kubectl create namespace myapp-db-staging
+kubectl create namespace myapp-db-prod
 
 # Deploy ArgoCD applications
-kubectl apply -f deploy/apps/myapp-qa-app.yaml -n argocd
-kubectl apply -f deploy/apps/myapp-staging-app.yaml -n argocd
-kubectl apply -f deploy/apps/myapp-prod-app.yaml -n argocd
+kubectl apply -f deploy/apps/myapp-db-qa-app.yaml -n argocd
+kubectl apply -f deploy/apps/myapp-db-staging-app.yaml -n argocd
+kubectl apply -f deploy/apps/myapp-db-prod-app.yaml -n argocd
 ```
 
 ## Rollback

@@ -7,7 +7,7 @@
 set -e
 
 ENVIRONMENT=${1:-dev}
-APP_NAME="myapp"
+APP_NAME="myapp-db-db"
 NAMESPACE="${APP_NAME}-${ENVIRONMENT}"
 
 # Colors for output

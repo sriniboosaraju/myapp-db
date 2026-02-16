@@ -11,7 +11,7 @@ my-monorepo/
 │   ├── index.js
 │   └── Dockerfile
 ├── charts/                       # Helm charts
-│   └── myapp/
+│   └── myapp-db/
 │       ├── Chart.yaml
 │       ├── values.yaml          # Base values
 │       ├── values-dev.yaml      # Dev environment (updated by CI)
@@ -21,7 +21,7 @@ my-monorepo/
 │           └── _helpers.tpl
 ├── deploy/                       # ArgoCD manifests
 │   └── apps/
-│       └── myapp-dev-app.yaml
+│       └── myapp-db-dev-app.yaml
 └── .github/
     └── workflows/
         └── ci-build-and-update-values.yml
@@ -34,11 +34,11 @@ my-monorepo/
 Before pushing to GitHub, replace the following placeholders:
 
 - `<GITHUB_OWNER>` in:
-  - `charts/myapp/values.yaml`
-  - `charts/myapp/values-dev.yaml`
-  - `deploy/apps/myapp-dev-app.yaml`
+  - `charts/myapp-db/values.yaml`
+  - `charts/myapp-db/values-dev.yaml`
+  - `deploy/apps/myapp-db-dev-app.yaml`
 - `<REPO>` in:
-  - `deploy/apps/myapp-dev-app.yaml`
+  - `deploy/apps/myapp-db-dev-app.yaml`
 
 ### 2. GitHub Actions Permissions
 
@@ -59,13 +59,13 @@ These are already configured in the workflow file.
 
 2. **Create the Application:**
    ```bash
-   kubectl apply -f deploy/apps/myapp-dev-app.yaml -n argocd
+   kubectl apply -f deploy/apps/myapp-db-dev-app.yaml -n argocd
    ```
 
 3. **Verify the application:**
    ```bash
-   argocd app get myapp-dev
-   argocd app sync myapp-dev
+   argocd app get myapp-db-dev
+   argocd app sync myapp-db-dev
    ```
 
 ### 4. Trigger the CI/CD Pipeline
@@ -81,7 +81,7 @@ git push origin main
 The workflow will:
 1. Build the Docker image
 2. Push to GHCR with tags: `<short-sha>` and `latest`
-3. Update `charts/myapp/values-dev.yaml` with the new tag
+3. Update `charts/myapp-db/values-dev.yaml` with the new tag
 4. Commit and push the change back to the repo
 
 ArgoCD will detect the change and automatically sync the deployment.

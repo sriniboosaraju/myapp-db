@@ -41,7 +41,7 @@ jobs:
       run: |
         TAG=${{ github.event.inputs.tag }}
         echo "Promoting image tag $TAG to Production"
-        yq -i ".image.tag = \"${TAG}\"" charts/myapp/values-prod.yaml
+        yq -i ".image.tag = \"${TAG}\"" charts/myapp-db/values-prod.yaml
     
     - name: Commit and push Production values change
       env:
@@ -51,11 +51,11 @@ jobs:
         TAG=${{ github.event.inputs.tag }}
         git config user.name "$GIT_COMMITTER_NAME"
         git config user.email "$GIT_COMMITTER_EMAIL"
-        git add charts/myapp/values-prod.yaml
+        git add charts/myapp-db/values-prod.yaml
         git commit -m "promote: Production to image tag ${TAG} [ci skip]"
         git push origin HEAD:main
     
     - name: Summary
       run: |
         echo "✅ Successfully promoted tag ${{ github.event.inputs.tag }} to Production"
-        echo "ArgoCD will sync the change to myapp-prod namespace"
+        echo "ArgoCD will sync the change to myapp-db-prod namespace"

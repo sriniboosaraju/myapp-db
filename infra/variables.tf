@@ -1,7 +1,7 @@
 variable "app_name" {
   description = "Name of the application"
   type        = string
-  default     = "myapp"
+  default     = "myapp-db-db"
 }
 
 variable "environment" {
@@ -55,7 +55,7 @@ variable "allocated_storage" {
 variable "db_name" {
   description = "Name of the default database"
   type        = string
-  default     = "myapp"
+  default     = "myapp-db_db"
 }
 
 variable "db_username" {
