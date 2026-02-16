@@ -117,24 +117,41 @@ jobs:
         aws-region: us-east-1
         role-session-name: GitHubActions-Deploy-${{ github.run_id }}
 
-    - name: Setup Terraform to get DB outputs
+    - name: Setup Terraform
       if: github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && inputs.enable_rds == true)
       uses: hashicorp/setup-terraform@v3
       with:
         terraform_version: '1.7.0'
         terraform_wrapper: false
 
-    - name: Get Database Credentials
+    - name: Provision Database (if enabled)
       if: github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && inputs.enable_rds == true)
-      id: db-creds
+      id: provision-db
       run: |
-        cd infra/rds-addon
+        cd infra
         
         echo "🔧 Initializing Terraform..."
         terraform init \
           -backend-config="bucket=${{ secrets.TF_STATE_BUCKET }}" \
-          -backend-config="key=myapp-db/dev-infra/terraform.tfstate" \
+          -backend-config="key=myapp/dev/terraform.tfstate" \
           -backend-config="region=us-east-1"
+        
+        echo "🔍 Checking if database exists..."
+        if terraform state list 2>/dev/null | grep -q "aws_db_instance.postgres"; then
+          echo "✅ Database already exists, skipping creation"
+          echo "db_created=false" >> $GITHUB_OUTPUT
+        else
+          echo "📦 Database does not exist, provisioning now..."
+          terraform apply -var-file="environments/dev.tfvars" -auto-approve
+          echo "✅ Database created successfully!"
+          echo "db_created=true" >> $GITHUB_OUTPUT
+        fi
+
+    - name: Get Database Credentials
+      if: github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && inputs.enable_rds == true)
+      id: db-creds
+      run: |
+        cd infra
         
         echo "📖 Reading database credentials from Terraform state..."
         
@@ -165,7 +182,7 @@ jobs:
 
     - name: Create namespace if not exists
       run: |
-        kubectl create namespace myapp-db-dev-infra --dry-run=client -o yaml | kubectl apply -f -
+        kubectl create namespace myapp-dev --dry-run=client -o yaml | kubectl apply -f -
 
     - name: Create database credentials secret
       if: github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && inputs.enable_rds == true)
@@ -176,14 +193,14 @@ jobs:
           --from-literal=DB_NAME="${{ steps.db-creds.outputs.DB_NAME }}" \
           --from-literal=DB_USER="${{ steps.db-creds.outputs.DB_USER }}" \
           --from-literal=DB_PASSWORD="${{ steps.db-creds.outputs.DB_PASSWORD }}" \
-          --namespace=myapp-db-dev-infra \
+          --namespace=myapp-dev \
           --dry-run=client -o yaml | kubectl apply -f -
         
         kubectl label secret myapp-db-credentials \
-          app=myapp-db \
-          environment=dev-infra \
+          app=myapp \
+          environment=dev \
           addon=postgres \
-          --namespace=myapp-db-dev-infra \
+          --namespace=myapp-dev \
           --overwrite
 
     - name: Deploy ArgoCD Application
@@ -192,15 +209,15 @@ jobs:
         echo "Deploying commit: ${COMMIT_SHA}"
         
         # Apply ArgoCD Application definition
-        kubectl apply -f deploy/apps/myapp-dev-infra-app.yaml -n argocd
+        kubectl apply -f deploy/apps/myapp-dev-app.yaml -n argocd
         
         # Update targetRevision to the specific commit
-        kubectl patch application myapp-db-dev-infra -n argocd \
+        kubectl patch application myapp-dev -n argocd \
           --type merge \
           -p "{\"spec\": {\"source\": {\"targetRevision\": \"${COMMIT_SHA}\"}}}"
         
         # Trigger sync with the specific commit
-        kubectl patch application myapp-db-dev-infra -n argocd \
+        kubectl patch application myapp-dev -n argocd \
           --type merge \
           -p "{\"operation\": {\"initiatedBy\": {\"username\": \"github-actions\"}, \"sync\": {\"revision\": \"${COMMIT_SHA}\"}}}"
         
@@ -216,12 +233,16 @@ jobs:
         
         # Show database info if RDS is enabled
         if [ "${{ github.event_name }}" == "push" ] || [ "${{ inputs.enable_rds }}" == "true" ]; then
-          echo "- **Database**: ✅ Connected to ${{ steps.db-creds.outputs.DB_HOST }}" >> $GITHUB_STEP_SUMMARY
+          if [ "${{ steps.provision-db.outputs.db_created }}" == "true" ]; then
+            echo "- **Database**: 🆕 New database created and connected to ${{ steps.db-creds.outputs.DB_HOST }}" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "- **Database**: ✅ Connected to existing database ${{ steps.db-creds.outputs.DB_HOST }}" >> $GITHUB_STEP_SUMMARY
+          fi
         else
           echo "- **Database**: ❌ Not attached (standalone mode)" >> $GITHUB_STEP_SUMMARY
         fi
         
-        echo "- **Namespace**: myapp-db-dev-infra" >> $GITHUB_STEP_SUMMARY
+        echo "- **Namespace**: myapp-dev" >> $GITHUB_STEP_SUMMARY
         echo "- **Deployment**: Via ArgoCD" >> $GITHUB_STEP_SUMMARY
         echo "" >> $GITHUB_STEP_SUMMARY
         echo "### Addons Status:" >> $GITHUB_STEP_SUMMARY
@@ -239,4 +260,4 @@ jobs:
         fi
         
         echo "" >> $GITHUB_STEP_SUMMARY
-        echo "View in ArgoCD: Check ArgoCD UI for myapp-db-dev-infra application" >> $GITHUB_STEP_SUMMARY
+        echo "View in ArgoCD: Check ArgoCD UI for myapp-dev application" >> $GITHUB_STEP_SUMMARY

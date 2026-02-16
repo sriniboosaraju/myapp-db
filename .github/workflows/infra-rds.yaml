@@ -7,94 +7,163 @@ permissions:
 on:
   push:
     branches:
-      - dev-infra
+      - main
+      - develop
     paths:
-      - 'infra/rds-addon/**'
-  workflow_dispatch:  # Manual trigger
+      - 'infra/**'
+  workflow_dispatch:
     inputs:
       environment:
         description: 'Environment to deploy'
         required: true
-        default: 'dev-infra'
+        default: 'dev'
         type: choice
         options:
-          - dev-infra
-          - qa
-          - staging
-          - prod
+          - dev
+
+env:
+  TF_VERSION: '1.7.0'
+  AWS_REGION: 'us-east-1'
+  ENVIRONMENT: 'dev'
 
 jobs:
   provision-rds:
+    name: Provision Database
     runs-on: ubuntu-latest
+    environment:
+      name: dev
 
     steps:
-    - name: Checkout code
-      uses: actions/checkout@v4
+      - name: Checkout code
+        uses: actions/checkout@v4
 
-    - name: Configure AWS Credentials via OIDC
-      uses: aws-actions/configure-aws-credentials@v4
-      with:
-        role-to-assume: ${{ secrets.AWS_ROLE_TO_ASSUME }}
-        aws-region: us-east-1
-        role-session-name: GitHubActions-InfraRDS-${{ github.run_id }}
+      - name: Configure AWS Credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.AWS_REGION }}
 
-    - name: Setup Terraform
-      uses: hashicorp/setup-terraform@v3
-      with:
-        terraform_version: '1.7.0'
-        terraform_wrapper: false
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: ${{ env.TF_VERSION }}
+          terraform_wrapper: false
 
-    - name: Determine Environment
-      id: env
-      run: |
-        if [ "${{ github.event_name }}" == "workflow_dispatch" ]; then
-          ENV="${{ inputs.environment }}"
-        else
-          ENV="dev-infra"
-        fi
-        echo "ENVIRONMENT=${ENV}" >> $GITHUB_OUTPUT
-        echo "📍 Deploying to environment: ${ENV}"
+      - name: Terraform Init
+        working-directory: ./infra
+        run: |
+          terraform init \
+            -backend-config="bucket=${{ secrets.TF_STATE_BUCKET }}" \
+            -backend-config="key=myapp/dev/terraform.tfstate" \
+            -backend-config="region=${{ env.AWS_REGION }}"
 
-    - name: Provision Database
-      run: |
-        cd infra/rds-addon
-        
-        ENV="${{ steps.env.outputs.ENVIRONMENT }}"
-        echo "🔧 Initializing Terraform for ${ENV} environment..."
-        
-        terraform init \
-          -backend-config="bucket=${{ secrets.TF_STATE_BUCKET }}" \
-          -backend-config="key=myapp-db/${ENV}/terraform.tfstate" \
-          -backend-config="region=us-east-1"
-        
-        echo "🔍 Checking database status..."
-        
-        # Use terraform plan to check if resources need to be created
-        # Exit codes: 0=no changes, 1=error, 2=changes needed
-        terraform plan \
-          -var-file="environments/${ENV}.tfvars" \
-          -detailed-exitcode \
-          -out=tfplan || PLAN_EXIT_CODE=$?
-        
-        if [ "$PLAN_EXIT_CODE" == "2" ]; then
-          echo "📦 Database needs provisioning. Creating resources..."
-          terraform apply -auto-approve tfplan
-          echo "✅ Database created successfully!"
-        elif [ "$PLAN_EXIT_CODE" == "0" ]; then
-          echo "✅ Database exists and is up to date."
-        else
-          echo "❌ Terraform plan failed with exit code: $PLAN_EXIT_CODE"
-          exit 1
-        fi
+      - name: Check if database exists
+        id: check-db
+        working-directory: ./infra
+        run: |
+          if terraform state list 2>/dev/null | grep -q "aws_db_instance.postgres"; then
+            echo "exists=true" >> $GITHUB_OUTPUT
+            echo "✅ Database already exists, skipping creation"
+          else
+            echo "exists=false" >> $GITHUB_OUTPUT
+            echo "📦 Database does not exist, will create"
+          fi
 
-    - name: Display Database Info
-      run: |
-        cd infra/rds-addon
-        ENV="${{ steps.env.outputs.ENVIRONMENT }}"
-        
-        echo "📊 Database Information for ${ENV}:"
-        echo "Host: $(terraform output -raw db_instance_address)"
-        echo "Port: $(terraform output -raw db_instance_port)"
-        echo "Database: $(terraform output -raw db_instance_name)"
-        echo "Username: $(terraform output -raw db_instance_username)"
-        echo "✅ Database is ready for application deployment"
+      - name: Terraform Plan
+        if: steps.check-db.outputs.exists == 'false'
+        working-directory: ./infra
+        env:
+          TF_VAR_environment: dev
+        run: |
+          terraform plan -var-file="environments/dev.tfvars"
+
+      - name: Create database infrastructure
+        if: steps.check-db.outputs.exists == 'false'
+        working-directory: ./infra
+        env:
+          TF_VAR_environment: dev
+        run: |
+          echo "🚀 Creating database infrastructure..."
+          terraform apply -var-file="environments/dev.tfvars" -auto-approve
+
+      - name: Get database outputs
+        id: db-outputs
+        working-directory: ./infra
+        run: |
+          DB_HOST=$(terraform output -raw db_instance_address)
+          DB_PORT=$(terraform output -raw db_instance_port)
+          DB_NAME=$(terraform output -raw db_instance_name)
+          DB_USER=$(terraform output -raw db_instance_username)
+          DB_SECRET_ARN=$(terraform output -raw db_credentials_secret_arn)
+          
+          echo "db_host=$DB_HOST" >> $GITHUB_OUTPUT
+          echo "db_port=$DB_PORT" >> $GITHUB_OUTPUT
+          echo "db_name=$DB_NAME" >> $GITHUB_OUTPUT
+          echo "db_user=$DB_USER" >> $GITHUB_OUTPUT
+          echo "db_secret_arn=$DB_SECRET_ARN" >> $GITHUB_OUTPUT
+          
+          echo "📊 Database Details:"
+          echo "  Host: $DB_HOST"
+          echo "  Port: $DB_PORT"
+          echo "  Database: $DB_NAME"
+
+      - name: Configure kubectl
+        run: |
+          aws eks update-kubeconfig \
+            --region ${{ env.AWS_REGION }} \
+            --name ${{ secrets.EKS_CLUSTER_NAME_DEV }}
+
+      - name: Attach database credentials to app
+        env:
+          NAMESPACE: myapp-dev
+          DB_HOST: ${{ steps.db-outputs.outputs.db_host }}
+          DB_PORT: ${{ steps.db-outputs.outputs.db_port }}
+          DB_NAME: ${{ steps.db-outputs.outputs.db_name }}
+          DB_USER: ${{ steps.db-outputs.outputs.db_user }}
+          DB_SECRET_ARN: ${{ steps.db-outputs.outputs.db_secret_arn }}
+        run: |
+          # Create namespace if it doesn't exist
+          kubectl create namespace ${NAMESPACE} --dry-run=client -o yaml | kubectl apply -f -
+          
+          # Get password from Secrets Manager
+          DB_PASSWORD=$(aws secretsmanager get-secret-value \
+            --secret-id "${DB_SECRET_ARN}" \
+            --query 'SecretString' \
+            --output text | jq -r '.password')
+          
+          # Create Kubernetes secret with database credentials
+          kubectl create secret generic myapp-db-credentials \
+            --from-literal=DB_HOST="${DB_HOST}" \
+            --from-literal=DB_PORT="${DB_PORT}" \
+            --from-literal=DB_NAME="${DB_NAME}" \
+            --from-literal=DB_USER="${DB_USER}" \
+            --from-literal=DB_PASSWORD="${DB_PASSWORD}" \
+            --namespace=${NAMESPACE} \
+            --dry-run=client -o yaml | kubectl apply -f -
+          
+          # Label the secret
+          kubectl label secret myapp-db-credentials \
+            app=myapp \
+            environment=dev \
+            addon=postgres \
+            --namespace=${NAMESPACE} \
+            --overwrite
+          
+          echo "✅ Database credentials attached to app"
+
+      - name: Summary
+        run: |
+          echo "## Database Infrastructure 🗄️" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          if [ "${{ steps.check-db.outputs.exists }}" = "true" ]; then
+            echo "- **Status**: ✅ Existing database (no changes)" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "- **Status**: 🆕 New database created" >> $GITHUB_STEP_SUMMARY
+          fi
+          echo "- **Environment**: dev" >> $GITHUB_STEP_SUMMARY
+          echo "- **Database Host**: ${{ steps.db-outputs.outputs.db_host }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **Database Name**: ${{ steps.db-outputs.outputs.db_name }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **Credentials**: ✅ Attached to myapp-dev namespace" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "Ready for application deployment! 🚀" >> $GITHUB_STEP_SUMMARY
