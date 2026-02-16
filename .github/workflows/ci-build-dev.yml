@@ -15,12 +15,46 @@ on:
       - 'charts/**'
       - 'deploy/**'
   workflow_dispatch:  # Manual trigger
+    inputs:
+      enable_rds:
+        description: 'Enable RDS Database Addon'
+        required: false
+        type: boolean
+        default: true
+      enable_redis:
+        description: 'Enable Redis Addon'
+        required: false
+        type: boolean
+        default: false
 
 jobs:
   build-push-update:
     runs-on: ubuntu-latest
 
     steps:
+    - name: Display Addon Configuration
+      run: |
+        echo "## Addon Configuration 🔧" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+        if [ "${{ github.event_name }}" == "push" ]; then
+          echo "- **Trigger**: Automatic (push)" >> $GITHUB_STEP_SUMMARY
+          echo "- **RDS Database**: ✅ Enabled (default for push)" >> $GITHUB_STEP_SUMMARY
+          echo "- **Redis**: ❌ Not configured" >> $GITHUB_STEP_SUMMARY
+        else
+          echo "- **Trigger**: Manual (workflow_dispatch)" >> $GITHUB_STEP_SUMMARY
+          if [ "${{ inputs.enable_rds }}" == "true" ]; then
+            echo "- **RDS Database**: ✅ Enabled" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "- **RDS Database**: ❌ Disabled" >> $GITHUB_STEP_SUMMARY
+          fi
+          if [ "${{ inputs.enable_redis }}" == "true" ]; then
+            echo "- **Redis**: ✅ Enabled (future)" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "- **Redis**: ❌ Disabled" >> $GITHUB_STEP_SUMMARY
+          fi
+        fi
+        echo "" >> $GITHUB_STEP_SUMMARY
+    
     - name: Checkout code
       uses: actions/checkout@v4
       with:
@@ -84,13 +118,14 @@ jobs:
         role-session-name: GitHubActions-Deploy-${{ github.run_id }}
 
     - name: Setup Terraform to get DB outputs
+      if: github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && inputs.enable_rds == true)
       uses: hashicorp/setup-terraform@v3
       with:
         terraform_version: '1.7.0'
         terraform_wrapper: false
 
-    - name: Check and Provision Database Addon
-      id: dbGet Database Credentials
+    - name: Get Database Credentials
+      if: github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && inputs.enable_rds == true)
       id: db-creds
       run: |
         cd infra/rds-addon
@@ -133,6 +168,7 @@ jobs:
         kubectl create namespace myapp-db-dev-infra --dry-run=client -o yaml | kubectl apply -f -
 
     - name: Create database credentials secret
+      if: github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && inputs.enable_rds == true)
       run: |
         kubectl create secret generic myapp-db-credentials \
           --from-literal=DB_HOST="${{ steps.db-creds.outputs.DB_HOST }}" \
@@ -177,8 +213,30 @@ jobs:
         echo "" >> $GITHUB_STEP_SUMMARY
         echo "- **Environment**: dev-infra" >> $GITHUB_STEP_SUMMARY
         echo "- **Image**: ghcr.io/${{ github.repository_owner }}/myapp-db:${{ steps.vars.outputs.TAG }}" >> $GITHUB_STEP_SUMMARY
-        echo "- **Database**: Connected to ${{ steps.db-creds.outputs.DB_HOST }}" >> $GITHUB_STEP_SUMMARY
+        
+        # Show database info if RDS is enabled
+        if [ "${{ github.event_name }}" == "push" ] || [ "${{ inputs.enable_rds }}" == "true" ]; then
+          echo "- **Database**: ✅ Connected to ${{ steps.db-creds.outputs.DB_HOST }}" >> $GITHUB_STEP_SUMMARY
+        else
+          echo "- **Database**: ❌ Not attached (standalone mode)" >> $GITHUB_STEP_SUMMARY
+        fi
+        
         echo "- **Namespace**: myapp-db-dev-infra" >> $GITHUB_STEP_SUMMARY
         echo "- **Deployment**: Via ArgoCD" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+        echo "### Addons Status:" >> $GITHUB_STEP_SUMMARY
+        
+        if [ "${{ github.event_name }}" == "push" ] || [ "${{ inputs.enable_rds }}" == "true" ]; then
+          echo "- 🗄️ **RDS PostgreSQL**: Attached" >> $GITHUB_STEP_SUMMARY
+        else
+          echo "- 🗄️ **RDS PostgreSQL**: Not attached" >> $GITHUB_STEP_SUMMARY
+        fi
+        
+        if [ "${{ inputs.enable_redis }}" == "true" ]; then
+          echo "- 🔴 **Redis**: Enabled (future implementation)" >> $GITHUB_STEP_SUMMARY
+        else
+          echo "- 🔴 **Redis**: Not configured" >> $GITHUB_STEP_SUMMARY
+        fi
+        
         echo "" >> $GITHUB_STEP_SUMMARY
         echo "View in ArgoCD: Check ArgoCD UI for myapp-db-dev-infra application" >> $GITHUB_STEP_SUMMARY
