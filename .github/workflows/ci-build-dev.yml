@@ -165,23 +165,6 @@ jobs:
           --namespace=myapp-db-dev \
           --overwrite
 
-    - name: Configure ArgoCD Repository Credentials
-      run: |
-        # Create or update repository secret for private GitHub repo
-        kubectl create secret generic myapp-db-repo \
-          --from-literal=url=https://github.com/sriniboosaraju/myapp-db.git \
-          --from-literal=username=${{ github.actor }} \
-          --from-literal=password=${{ secrets.GITHUB_TOKEN }} \
-          --namespace=argocd \
-          --dry-run=client -o yaml | kubectl apply -f -
-        
-        kubectl label secret myapp-db-repo \
-          argocd.argoproj.io/secret-type=repository \
-          --namespace=argocd \
-          --overwrite
-        
-        echo "✅ ArgoCD repository credentials configured"
-
     - name: Deploy ArgoCD Application
       run: |
         # Apply ArgoCD Application definition
