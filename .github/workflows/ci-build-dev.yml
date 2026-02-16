@@ -141,7 +141,7 @@ jobs:
 
     - name: Configure kubectl for EKS
       run: |
-        aws eks update-kubeconfig --name srini-cluster --region us-east-1
+        aws eks update-kubeconfig --name eks-srini --region us-east-1
 
     - name: Create namespace if not exists
       run: |
