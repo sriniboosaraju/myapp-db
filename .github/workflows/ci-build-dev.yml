@@ -99,9 +99,20 @@ jobs:
           -backend-config="key=myapp-db/dev/terraform.tfstate" \
           -backend-config="region=us-east-1"
         
-        # Check if database already exists
-        if ! terraform output db_instance_address &> /dev/null; then
-          echo "📦 Database addon not found. Creating new RDS instance..."
+        # Check if database already exists in AWS (not just Terraform state)
+        DB_IDENTIFIER="myapp-db-dev-db"
+        
+        echo "🔍 Checking if database exists in AWS..."
+        if aws rds describe-db-instances --db-instance-identifier "$DB_IDENTIFIER" --region us-east-1 &> /dev/null; then
+          echo "✅ Database addon found in AWS: $DB_IDENTIFIER"
+          
+          # Check if it's in Terraform state
+          if ! terraform output db_instance_address &> /dev/null; then
+            echo "⚠️  Database exists in AWS but not in Terraform state. Importing..."
+            terraform import aws_db_instance.postgres "$DB_IDENTIFIER" || echo "Import failed, continuing..."
+          fi
+        else
+          echo "📦 Database addon not found in AWS. Creating new RDS instance..."
           
           # Create the database infrastructure
           terraform apply \
@@ -109,11 +120,9 @@ jobs:
             -auto-approve
           
           echo "✅ Database addon created successfully!"
-        else
-          echo "✅ Database addon found. Using existing instance."
         fi
         
-        # Get database credentials
+        # Get database credentials from Terraform state
         DB_HOST=$(terraform output -raw db_instance_address)
         DB_PORT=$(terraform output -raw db_instance_port)
         DB_NAME=$(terraform output -raw db_instance_name)
