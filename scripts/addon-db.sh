@@ -43,7 +43,7 @@ check_prerequisites() {
 provision_database() {
     log_info "Provisioning PostgreSQL database for ${ENVIRONMENT} environment..."
     
-    cd infra
+    cd infra/rds-addon
     
     # Initialize Terraform
     log_info "Initializing Terraform..."

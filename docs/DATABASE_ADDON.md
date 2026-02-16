@@ -72,7 +72,7 @@ The Helm chart automatically:
 │  addon-db.sh    │  ← User runs this script
 └────────┬────────┘
          │
-         ├─► Terraform (infra/) ──► AWS RDS PostgreSQL
+         ├─► Terraform (infra/rds-addon/) ──► AWS RDS PostgreSQL
          │                          │
          │                          ├─► DB Subnet Group
          │                          ├─► Security Group
@@ -92,22 +92,22 @@ The Helm chart automatically:
 
 Each environment has its own Terraform variables file:
 
-- **Dev**: `infra/environments/dev.tfvars`
+- **Dev**: `infra/rds-addon/environments/dev.tfvars`
   - Instance: `db.t3.micro`
   - Storage: 20 GB
   - Backups: 3 days
   
-- **QA**: `infra/environments/qa.tfvars`
+- **QA**: `infra/rds-addon/environments/qa.tfvars`
   - Instance: `db.t3.small`
   - Storage: 30 GB
   - Backups: 5 days
 
-- **Staging**: `infra/environments/staging.tfvars`
+- **Staging**: `infra/rds-addon/environments/staging.tfvars`
   - Instance: `db.t3.medium`
   - Storage: 50 GB
   - Backups: 7 days
 
-- **Production**: `infra/environments/prod.tfvars`
+- **Production**: `infra/rds-addon/environments/prod.tfvars`
   - Instance: `db.r6g.large`
   - Storage: 100 GB
   - Backups: 30 days
@@ -214,7 +214,7 @@ kubectl run psql-test --rm -it \
 Edit the environment-specific tfvars file before creating:
 
 ```bash
-vim infra/environments/dev.tfvars
+vim infra/rds-addon/environments/dev.tfvars
 ./scripts/addon-db.sh dev create
 ```
 
@@ -236,5 +236,5 @@ Modify the Terraform configuration to support multiple database instances or use
 
 For issues or questions:
 1. Check the logs: `./scripts/addon-db.sh dev info`
-2. Review Terraform state: `cd infra && terraform show`
+2. Review Terraform state: `cd infra/rds-addon && terraform show`
 3. Check Kubernetes events: `kubectl get events -n myapp-db-dev`
