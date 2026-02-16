@@ -69,6 +69,14 @@ resource "aws_security_group" "postgres" {
     security_groups = var.app_security_group_ids
   }
 
+  ingress {
+    description = "PostgreSQL from VPC"
+    from_port   = 5432
+    to_port     = 5432
+    protocol    = "tcp"
+    cidr_blocks = ["192.168.0.0/16"]
+  }
+
   egress {
     description = "Allow all outbound traffic"
     from_port   = 0
