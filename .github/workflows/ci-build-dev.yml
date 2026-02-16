@@ -99,27 +99,24 @@ jobs:
           -backend-config="key=myapp-db/dev/terraform.tfstate" \
           -backend-config="region=us-east-1"
         
-        # Check if database already exists in AWS (not just Terraform state)
-        DB_IDENTIFIER="myapp-db-dev-db"
+        echo "🔍 Checking database addon status..."
         
-        echo "🔍 Checking if database exists in AWS..."
-        if aws rds describe-db-instances --db-instance-identifier "$DB_IDENTIFIER" --region us-east-1 &> /dev/null; then
-          echo "✅ Database addon found in AWS: $DB_IDENTIFIER"
-          
-          # Check if it's in Terraform state
-          if ! terraform output db_instance_address &> /dev/null; then
-            echo "⚠️  Database exists in AWS but not in Terraform state. Importing..."
-            terraform import aws_db_instance.postgres "$DB_IDENTIFIER" || echo "Import failed, continuing..."
-          fi
-        else
-          echo "📦 Database addon not found in AWS. Creating new RDS instance..."
-          
-          # Create the database infrastructure
-          terraform apply \
-            -var-file="environments/dev.tfvars" \
-            -auto-approve
-          
+        # Use terraform plan to check if resources need to be created
+        # Exit codes: 0=no changes, 1=error, 2=changes needed
+        terraform plan \
+          -var-file="environments/dev.tfvars" \
+          -detailed-exitcode \
+          -out=tfplan || PLAN_EXIT_CODE=$?
+        
+        if [ "$PLAN_EXIT_CODE" == "2" ]; then
+          echo "📦 Database addon needs provisioning. Creating resources..."
+          terraform apply -auto-approve tfplan
           echo "✅ Database addon created successfully!"
+        elif [ "$PLAN_EXIT_CODE" == "0" ]; then
+          echo "✅ Database addon exists and is up to date."
+        else
+          echo "❌ Terraform plan failed with exit code: $PLAN_EXIT_CODE"
+          exit 1
         fi
         
         # Get database credentials from Terraform state
