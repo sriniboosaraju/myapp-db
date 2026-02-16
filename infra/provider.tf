@@ -12,14 +12,14 @@ terraform {
     }
   }
 
-  # Uncomment and configure backend for remote state
-  # backend "s3" {
-  #   bucket         = "your-terraform-state-bucket"
-  #   key            = "myapp-db/infra/terraform.tfstate"
-  #   region         = "us-east-1"
-  #   encrypt        = true
-  #   dynamodb_table = "terraform-state-lock"
-  # }
+  backend "s3" {
+    # Backend configuration provided via -backend-config flags in CI/CD
+    # bucket         = "myapp-terraform-state-479604670156"
+    # key            = "myapp-db/dev/terraform.tfstate"
+    # region         = "us-east-1"
+    # encrypt        = true
+    # dynamodb_table = "myapp-terraform-locks"
+  }
 }
 
 provider "aws" {
