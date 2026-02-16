@@ -167,15 +167,23 @@ jobs:
 
     - name: Deploy ArgoCD Application
       run: |
+        COMMIT_SHA=$(git rev-parse HEAD)
+        echo "Deploying commit: ${COMMIT_SHA}"
+        
         # Apply ArgoCD Application definition
         kubectl apply -f deploy/apps/myapp-dev-app.yaml -n argocd
         
-        # Sync the application
+        # Update targetRevision to the specific commit
         kubectl patch application myapp-db-dev -n argocd \
           --type merge \
-          -p '{"operation": {"initiatedBy": {"username": "github-actions"}, "sync": {"revision": "HEAD"}}}'
+          -p "{\"spec\": {\"source\": {\"targetRevision\": \"${COMMIT_SHA}\"}}}"
         
-        echo "✅ ArgoCD Application deployed. Syncing..."
+        # Trigger sync with the specific commit
+        kubectl patch application myapp-db-dev -n argocd \
+          --type merge \
+          -p "{\"operation\": {\"initiatedBy\": {\"username\": \"github-actions\"}, \"sync\": {\"revision\": \"${COMMIT_SHA}\"}}}"
+        
+        echo "✅ ArgoCD Application deployed. Syncing to commit ${COMMIT_SHA}..."
         
         # Wait for sync to complete (optional)
         kubectl wait --for=condition=Synced application/myapp-db-dev -n argocd --timeout=300s || true

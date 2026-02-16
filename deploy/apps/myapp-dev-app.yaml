@@ -7,7 +7,7 @@ spec:
   project: default
   source:
     repoURL: 'https://github.com/sriniboosaraju/myapp-db.git'
-    targetRevision: HEAD
+    targetRevision: dev
     path: charts/myapp-db
     helm:
       valueFiles:
