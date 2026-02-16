@@ -1,0 +1,100 @@
+name: Provision RDS Infrastructure
+
+permissions:
+  contents: read
+  id-token: write
+
+on:
+  push:
+    branches:
+      - dev
+    paths:
+      - 'infra/rds-addon/**'
+  workflow_dispatch:  # Manual trigger
+    inputs:
+      environment:
+        description: 'Environment to deploy'
+        required: true
+        default: 'dev'
+        type: choice
+        options:
+          - dev
+          - qa
+          - staging
+          - prod
+
+jobs:
+  provision-rds:
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Configure AWS Credentials via OIDC
+      uses: aws-actions/configure-aws-credentials@v4
+      with:
+        role-to-assume: ${{ secrets.AWS_ROLE_TO_ASSUME }}
+        aws-region: us-east-1
+        role-session-name: GitHubActions-InfraRDS-${{ github.run_id }}
+
+    - name: Setup Terraform
+      uses: hashicorp/setup-terraform@v3
+      with:
+        terraform_version: '1.7.0'
+        terraform_wrapper: false
+
+    - name: Determine Environment
+      id: env
+      run: |
+        if [ "${{ github.event_name }}" == "workflow_dispatch" ]; then
+          ENV="${{ inputs.environment }}"
+        else
+          ENV="dev"
+        fi
+        echo "ENVIRONMENT=${ENV}" >> $GITHUB_OUTPUT
+        echo "📍 Deploying to environment: ${ENV}"
+
+    - name: Provision Database
+      run: |
+        cd infra/rds-addon
+        
+        ENV="${{ steps.env.outputs.ENVIRONMENT }}"
+        echo "🔧 Initializing Terraform for ${ENV} environment..."
+        
+        terraform init \
+          -backend-config="bucket=${{ secrets.TF_STATE_BUCKET }}" \
+          -backend-config="key=myapp-db/${ENV}/terraform.tfstate" \
+          -backend-config="region=us-east-1"
+        
+        echo "🔍 Checking database status..."
+        
+        # Use terraform plan to check if resources need to be created
+        # Exit codes: 0=no changes, 1=error, 2=changes needed
+        terraform plan \
+          -var-file="environments/${ENV}.tfvars" \
+          -detailed-exitcode \
+          -out=tfplan || PLAN_EXIT_CODE=$?
+        
+        if [ "$PLAN_EXIT_CODE" == "2" ]; then
+          echo "📦 Database needs provisioning. Creating resources..."
+          terraform apply -auto-approve tfplan
+          echo "✅ Database created successfully!"
+        elif [ "$PLAN_EXIT_CODE" == "0" ]; then
+          echo "✅ Database exists and is up to date."
+        else
+          echo "❌ Terraform plan failed with exit code: $PLAN_EXIT_CODE"
+          exit 1
+        fi
+
+    - name: Display Database Info
+      run: |
+        cd infra/rds-addon
+        ENV="${{ steps.env.outputs.ENVIRONMENT }}"
+        
+        echo "📊 Database Information for ${ENV}:"
+        echo "Host: $(terraform output -raw db_instance_address)"
+        echo "Port: $(terraform output -raw db_instance_port)"
+        echo "Database: $(terraform output -raw db_instance_name)"
+        echo "Username: $(terraform output -raw db_instance_username)"
+        echo "✅ Database is ready for application deployment"
