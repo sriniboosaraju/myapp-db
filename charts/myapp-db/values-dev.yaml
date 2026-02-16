@@ -2,7 +2,7 @@
 replicaCount: 1
 image:
   repository: ghcr.io/sriniboosaraju/myapp-db
-  tag: "8a555f7"
+  tag: "9c200af"
   pullPolicy: Always
 # Database addon
 database:
