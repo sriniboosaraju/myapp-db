@@ -7,7 +7,7 @@ permissions:
 on:
   push:
     branches:
-      - dev
+      - dev-infra
     paths:
       - 'infra/rds-addon/**'
   workflow_dispatch:  # Manual trigger
@@ -15,10 +15,10 @@ on:
       environment:
         description: 'Environment to deploy'
         required: true
-        default: 'dev'
+        default: 'dev-infra'
         type: choice
         options:
-          - dev
+          - dev-infra
           - qa
           - staging
           - prod
@@ -50,7 +50,7 @@ jobs:
         if [ "${{ github.event_name }}" == "workflow_dispatch" ]; then
           ENV="${{ inputs.environment }}"
         else
-          ENV="dev"
+          ENV="dev-infra"
         fi
         echo "ENVIRONMENT=${ENV}" >> $GITHUB_OUTPUT
         echo "📍 Deploying to environment: ${ENV}"

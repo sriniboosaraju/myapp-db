@@ -7,8 +7,8 @@ This directory contains the Akkeris-style database addon functionality that allo
 ### Create and Attach Database
 
 ```bash
-# Create database for dev environment
-./scripts/addon-db.sh dev create
+# Create database for dev-infra environment
+./scripts/addon-db.sh dev-infra create
 
 # Create database for production
 ./scripts/addon-db.sh prod create
@@ -23,13 +23,13 @@ This single command will:
 ### View Database Information
 
 ```bash
-./scripts/addon-db.sh dev info
+./scripts/addon-db.sh dev-infra info
 ```
 
 ### Remove Database
 
 ```bash
-./scripts/addon-db.sh dev remove
+./scripts/addon-db.sh dev-infra remove
 ```
 
 ## How It Works
@@ -215,7 +215,7 @@ Edit the environment-specific tfvars file before creating:
 
 ```bash
 vim infra/rds-addon/environments/dev.tfvars
-./scripts/addon-db.sh dev create
+./scripts/addon-db.sh dev-infra create
 ```
 
 ### Use existing VPC
@@ -237,4 +237,4 @@ Modify the Terraform configuration to support multiple database instances or use
 For issues or questions:
 1. Check the logs: `./scripts/addon-db.sh dev info`
 2. Review Terraform state: `cd infra/rds-addon && terraform show`
-3. Check Kubernetes events: `kubectl get events -n myapp-db-dev`
+3. Check Kubernetes events: `kubectl get events -n myapp-db-dev-infra`

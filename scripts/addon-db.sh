@@ -2,11 +2,11 @@
 
 # Akkeris-style Database Addon Script
 # Usage: ./scripts/addon-db.sh <environment>
-# Example: ./scripts/addon-db.sh dev
+# Example: ./scripts/addon-db.sh dev-infra
 
 set -e
 
-ENVIRONMENT=${1:-dev}
+ENVIRONMENT=${1:-dev-infra}
 APP_NAME="myapp-db-db"
 NAMESPACE="${APP_NAME}-${ENVIRONMENT}"
 

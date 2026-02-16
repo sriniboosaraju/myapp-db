@@ -25,7 +25,7 @@ When you push code to `develop` or `main` branches:
 
 ## Environments
 
-- **`develop` branch** → Deploys to `dev` environment
+- **`dev-infra` branch** → Deploys to `dev-infra` environment
 - **`main` branch** → Deploys to `staging`, then `prod` (with approval)
 
 ## Required GitHub Secrets

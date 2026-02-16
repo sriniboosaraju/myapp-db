@@ -1,4 +1,4 @@
-environment = "dev"
+environment = "dev-infra"
 aws_region  = "us-east-1"
 
 # Network configuration - EKS Srini Cluster VPC
