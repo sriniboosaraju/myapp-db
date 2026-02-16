@@ -11,6 +11,9 @@ const pool = new Pool({
   database: process.env.DB_NAME || 'myapp',
   user: process.env.DB_USER || 'postgres',
   password: process.env.DB_PASSWORD || 'postgres',
+  ssl: {
+    rejectUnauthorized: false
+  }
 });
 
 app.use(express.json());
