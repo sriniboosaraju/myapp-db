@@ -81,15 +81,15 @@ app.get('/', (req, res) => {
             const response = await fetch('/api/users');
             const users = await response.json();
             const tbody = document.getElementById('users-list');
-            tbody.innerHTML = users.map(user => `
+            tbody.innerHTML = users.map(user => \`
               <tr>
-                <td>${user.id}</td>
-                <td>${user.name}</td>
-                <td>${user.email}</td>
-                <td>${new Date(user.created_at).toLocaleString()}</td>
-                <td><button class="delete-btn" onclick="deleteUser(${user.id})">Delete</button></td>
+                <td>\${user.id}</td>
+                <td>\${user.name}</td>
+                <td>\${user.email}</td>
+                <td>\${new Date(user.created_at).toLocaleString()}</td>
+                <td><button class="delete-btn" onclick="deleteUser(\${user.id})">Delete</button></td>
               </tr>
-            `).join('');
+            \`).join('');
           } catch (error) {
             showStatus('Error loading users', true);
           }
