@@ -59,14 +59,18 @@ jobs:
       - name: Pretty Plan
         working-directory: infra/ec2
         run: |
-          terraform show -no-color ec2.tfplan > /tmp/plan.txt
-          echo "## Terraform Plan – EC2 (dev)" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo '```diff' >> $GITHUB_STEP_SUMMARY
-          cat /tmp/plan.txt >> $GITHUB_STEP_SUMMARY
-          echo '```' >> $GITHUB_STEP_SUMMARY
-          echo "Plan output:"
-          cat /tmp/plan.txt
+          # Capture stdout+stderr, print to log and file simultaneously
+          terraform show -no-color ec2.tfplan 2>&1 | tee /tmp/plan.txt
+          PLAN_SIZE=$(wc -c < /tmp/plan.txt)
+          echo "Plan file size: ${PLAN_SIZE} bytes"
+
+          {
+            echo "## Terraform Plan – EC2 (dev)"
+            echo ""
+            echo '```diff'
+            cat /tmp/plan.txt
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
 
       # ── AWS Pricing cost estimate (no API key needed) ────────────
       - name: AWS Pricing cost estimate
