@@ -19,10 +19,12 @@ jobs:
 
       # ── Security scan ────────────────────────────────────────────
       - name: tfsec (security scan)
-        uses: aquasecurity/tfsec-action@v1.0.0
+        uses: aquasecurity/trivy-action@master
         with:
-          working_directory: infra/ec2
-          soft_fail: true          # don't block the run, just report
+          scan-type: config
+          scan-ref: infra/ec2
+          exit-code: '0'           # don't block the run, just report
+          format: table
 
       # ── AWS auth & Terraform setup ───────────────────────────────
       - name: Configure AWS Credentials via OIDC
