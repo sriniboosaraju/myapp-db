@@ -5,6 +5,7 @@
 *.tfvars
 !terraform.tfvars.example
 !environments/dev.tfvars
+!ec2/environments/dev.tfvars
 .terraform.lock.hcl
 crash.log
 override.tf
