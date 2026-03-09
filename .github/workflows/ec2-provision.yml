@@ -141,24 +141,57 @@ jobs:
               exit(0)
 
           action_icon = {
-              "create":      "➕ create",
-              "update":      "🔄 update",
-              "delete":      "🗑️ delete",
-              "replace":     "♻️ replace",
-              "no-op":       "✅ no-op",
-              "read":        "📖 read",
+              "create":  "➕ create",
+              "update":  "🔄 update",
+              "delete":  "🗑️ delete",
+              "replace": "♻️ replace",
+              "no-op":   "✅ no-op",
+              "read":    "📖 read",
           }
 
-          # Attributes to skip (internal / noise)
+          # Top-level attributes to skip entirely (internal metadata)
           SKIP_ATTRS = {
               "id", "arn", "tags_all", "timeouts", "owner_id",
               "availability_zone", "placement_group",
           }
 
+          def scalar(v):
+              """Return True if v is a plain value (not a nested dict/list-of-dicts)."""
+              if isinstance(v, dict):
+                  return False
+              if isinstance(v, list) and v and isinstance(v[0], dict):
+                  return False
+              return True
+
+          def expand_attr(prefix, bv, av, action_key):
+              """
+              Yield (attribute_name, before_str, after_str) rows.
+              Expands dict-valued attributes (e.g. tags) into one row per changed key.
+              """
+              if isinstance(bv, dict) or isinstance(av, dict):
+                  bd = bv if isinstance(bv, dict) else {}
+                  ad = av if isinstance(av, dict) else {}
+                  all_keys = sorted(set(bd.keys()) | set(ad.keys()))
+                  for k in all_keys:
+                      bkv = bd.get(k)
+                      akv = ad.get(k)
+                      if action_key == "create":
+                          if akv not in (None, ""):
+                              yield f"{prefix}.{k}", "–", str(akv)
+                      elif action_key == "delete":
+                          if bkv not in (None, ""):
+                              yield f"{prefix}.{k}", str(bkv), "–"
+                      else:
+                          if bkv != akv:
+                              yield f"{prefix}.{k}", str(bkv) if bkv is not None else "–", str(akv) if akv is not None else "–"
+              else:
+                  bstr = str(bv) if bv is not None else "–"
+                  astr = str(av) if av is not None else "–"
+                  yield prefix, bstr, astr
+
           rows = []
           for rc in plan.get("resource_changes", []):
               actions = rc.get("change", {}).get("actions", ["no-op"])
-              # Normalise ["create","delete"] → "replace"
               if set(actions) == {"create", "delete"}:
                   action_key = "replace"
               else:
@@ -172,41 +205,32 @@ jobs:
               after   = rc.get("change", {}).get("after")  or {}
 
               if action_key == "create":
-                  # Show key attributes being set
-                  attrs_to_show = {
-                      k: (None, v)
-                      for k, v in after.items()
-                      if k not in SKIP_ATTRS and v not in (None, "", [], {})
-                  }
+                  candidates = {k: (None, v) for k, v in after.items()
+                                if k not in SKIP_ATTRS and v not in (None, "", [], {})}
               elif action_key == "delete":
-                  attrs_to_show = {
-                      k: (v, None)
-                      for k, v in before.items()
-                      if k not in SKIP_ATTRS and v not in (None, "", [], {})
-                  }
+                  candidates = {k: (v, None) for k, v in before.items()
+                                if k not in SKIP_ATTRS and v not in (None, "", [], {})}
               else:
-                  # update / replace – show only changed attrs
-                  attrs_to_show = {}
-                  all_keys = set(before.keys()) | set(after.keys())
-                  for k in all_keys:
+                  candidates = {}
+                  for k in set(before.keys()) | set(after.keys()):
                       if k in SKIP_ATTRS:
                           continue
-                      bv = before.get(k)
-                      av = after.get(k)
+                      bv, av = before.get(k), after.get(k)
                       if bv != av:
-                          attrs_to_show[k] = (bv, av)
+                          candidates[k] = (bv, av)
 
-              for attr, (bv, av) in attrs_to_show.items():
-                  rows.append({
-                      "action":    action_key,
-                      "resource":  address,
-                      "attribute": attr,
-                      "before":    str(bv) if bv is not None else "–",
-                      "after":     str(av) if av is not None else "–",
-                  })
+              for attr, (bv, av) in sorted(candidates.items()):
+                  for attr_name, bstr, astr in expand_attr(attr, bv, av, action_key):
+                      rows.append({
+                          "action":    action_key,
+                          "resource":  address,
+                          "attribute": attr_name,
+                          "before":    bstr,
+                          "after":     astr,
+                      })
 
-          def fmt(val: str, max_len: int = 60) -> str:
-              val = val.replace("|", "\\|")
+          def fmt(val: str, max_len: int = 55) -> str:
+              val = val.replace("|", "\\|").replace("\n", " ")
               return val if len(val) <= max_len else val[:max_len - 3] + "..."
 
           with open(summary_file, "a") as s:
@@ -214,7 +238,7 @@ jobs:
               if not rows:
                   s.write("✅ No changes — infrastructure is up to date.\n\n")
               else:
-                  s.write(f"**{len(rows)} attribute change(s)** planned.\n\n")
+                  s.write(f"**{len(rows)} change(s)** planned.\n\n")
                   s.write("| Action | Resource | Attribute | Before | After |\n")
                   s.write("|---|---|---|---|---|\n")
                   for r in rows:
