@@ -64,6 +64,22 @@ jobs:
             -backend-config="region=us-east-1"
 
       # ── Plan ─────────────────────────────────────────────────────
+      - name: Debug – state vs config
+        working-directory: infra/ec2
+        run: |
+          echo "=== tfvars instance_type ==="
+          grep ec2_instance_type "$GITHUB_WORKSPACE/infra/ec2/environments/dev.tfvars"
+          echo "=== Terraform state instance_type ==="
+          terraform state show aws_instance.app 2>/dev/null | grep instance_type || echo "No state found for aws_instance.app"
+          echo "=== Live AWS instance_type ==="
+          INSTANCE_ID=$(terraform state show aws_instance.app 2>/dev/null | grep '^\s*id\s*=' | awk '{print $3}' | tr -d '"')
+          if [ -n "$INSTANCE_ID" ]; then
+            aws ec2 describe-instances --instance-ids "$INSTANCE_ID" \
+              --query 'Reservations[0].Instances[0].InstanceType' --output text
+          else
+            echo "No instance ID found in state"
+          fi
+
       - name: Terraform Plan (EC2 only)
         working-directory: infra/ec2
         run: |
