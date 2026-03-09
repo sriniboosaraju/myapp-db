@@ -24,22 +24,57 @@ jobs:
           scan-type: config
           scan-ref: infra/ec2
           exit-code: '0'           # don't block the run, just report
-          format: table
-          output: /tmp/trivy.txt
+          format: json
+          output: /tmp/trivy.json
 
-      - name: Trivy results → summary
+      - name: Trivy results → summary table
         run: |
-          {
-            echo "## Trivy Security Scan – EC2 (dev)"
-            echo ""
-            if [ -s /tmp/trivy.txt ]; then
-              echo '```'
-              cat /tmp/trivy.txt
-              echo '```'
-            else
-              echo "✅ No misconfigurations found."
-            fi
-          } >> "$GITHUB_STEP_SUMMARY"
+          python3 << 'EOF'
+          import json, os
+
+          summary_file = os.environ["GITHUB_STEP_SUMMARY"]
+
+          try:
+              with open("/tmp/trivy.json") as f:
+                  data = json.load(f)
+          except Exception as e:
+              with open(summary_file, "a") as s:
+                  s.write(f"## Trivy Security Scan – EC2 (dev)\n\n❌ Failed to parse results: {e}\n")
+              exit(0)
+
+          rows = []
+          for result in data.get("Results", []):
+              for m in result.get("Misconfigurations", []):
+                  rows.append({
+                      "severity": m.get("Severity", ""),
+                      "id":       m.get("ID", ""),
+                      "title":    m.get("Title", ""),
+                      "resource": result.get("Target", ""),
+                      "status":   m.get("Status", ""),
+                  })
+
+          # Sort by severity order
+          order = {"CRITICAL": 0, "HIGH": 1, "MEDIUM": 2, "LOW": 3, "UNKNOWN": 4}
+          rows.sort(key=lambda r: order.get(r["severity"].upper(), 5))
+
+          severity_icon = {
+              "CRITICAL": "🔴", "HIGH": "🟠", "MEDIUM": "🟡",
+              "LOW": "🔵", "UNKNOWN": "⚪",
+          }
+
+          with open(summary_file, "a") as s:
+              s.write("## Trivy Security Scan – EC2 (dev)\n\n")
+              if not rows:
+                  s.write("✅ No misconfigurations found.\n")
+              else:
+                  s.write(f"**{len(rows)} finding(s)** detected.\n\n")
+                  s.write("| Severity | ID | Title | Resource | Status |\n")
+                  s.write("|---|---|---|---|---|\n")
+                  for r in rows:
+                      icon = severity_icon.get(r["severity"].upper(), "⚪")
+                      s.write(f"| {icon} {r['severity']} | `{r['id']}` | {r['title']} | `{r['resource']}` | {r['status']} |\n")
+              s.write("\n")
+          EOF
 
       # ── AWS auth & Terraform setup ───────────────────────────────
       - name: Configure AWS Credentials via OIDC
