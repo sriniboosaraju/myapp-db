@@ -3,7 +3,7 @@ name: EC2 Provision (Test)
 permissions:
   contents: read
   id-token: write
-  pull-requests: write  # needed to post plan comments on PRs
+  pull-requests: write
 
 on:
   workflow_dispatch:
@@ -17,68 +17,22 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
         with:
-          ref: pp   # always use pp branch — where changes are made
+          ref: pp
 
-      # ── Security scan ────────────────────────────────────────────
-      - name: tfsec (security scan)
+      - name: Trivy security scan
         uses: aquasecurity/trivy-action@master
         with:
           scan-type: config
           scan-ref: infra/ec2
-          exit-code: '0'           # don't block the run, just report
+          exit-code: "0"
           format: json
           output: /tmp/trivy.json
 
-      - name: Trivy results → summary table
-        run: |
-          python3 << 'EOF'
-          import json, os
+      - name: Trivy results - summary table
+        run: python3 $GITHUB_WORKSPACE/scripts/trivy_summary.py
+        env:
+          TRIVY_JSON: /tmp/trivy.json
 
-          summary_file = os.environ["GITHUB_STEP_SUMMARY"]
-
-          try:
-              with open("/tmp/trivy.json") as f:
-                  data = json.load(f)
-          except Exception as e:
-              with open(summary_file, "a") as s:
-                  s.write(f"## Trivy Security Scan – EC2 (dev)\n\n❌ Failed to parse results: {e}\n")
-              exit(0)
-
-          rows = []
-          for result in data.get("Results", []):
-              for m in result.get("Misconfigurations", []):
-                  rows.append({
-                      "severity": m.get("Severity", ""),
-                      "id":       m.get("ID", ""),
-                      "title":    m.get("Title", ""),
-                      "resource": result.get("Target", ""),
-                      "status":   m.get("Status", ""),
-                  })
-
-          # Sort by severity order
-          order = {"CRITICAL": 0, "HIGH": 1, "MEDIUM": 2, "LOW": 3, "UNKNOWN": 4}
-          rows.sort(key=lambda r: order.get(r["severity"].upper(), 5))
-
-          severity_icon = {
-              "CRITICAL": "🔴", "HIGH": "🟠", "MEDIUM": "🟡",
-              "LOW": "🔵", "UNKNOWN": "⚪",
-          }
-
-          with open(summary_file, "a") as s:
-              s.write("## Trivy Security Scan – EC2 (dev)\n\n")
-              if not rows:
-                  s.write("✅ No misconfigurations found.\n")
-              else:
-                  s.write(f"**{len(rows)} finding(s)** detected.\n\n")
-                  s.write("| Severity | ID | Title | Resource | Status |\n")
-                  s.write("|---|---|---|---|---|\n")
-                  for r in rows:
-                      icon = severity_icon.get(r["severity"].upper(), "⚪")
-                      s.write(f"| {icon} {r['severity']} | `{r['id']}` | {r['title']} | `{r['resource']}` | {r['status']} |\n")
-              s.write("\n")
-          EOF
-
-      # ── AWS auth & Terraform setup ───────────────────────────────
       - name: Configure AWS Credentials via OIDC
         uses: aws-actions/configure-aws-credentials@v4
         with:
@@ -89,7 +43,7 @@ jobs:
       - name: Setup Terraform
         uses: hashicorp/setup-terraform@v3
         with:
-          terraform_version: '1.7.0'
+          terraform_version: "1.7.0"
           terraform_wrapper: false
 
       - name: Terraform Init
@@ -100,19 +54,18 @@ jobs:
             -backend-config="key=myapp-db/dev/ec2/terraform.tfstate" \
             -backend-config="region=us-east-1"
 
-      # ── Plan ─────────────────────────────────────────────────────
-      - name: Debug – state vs config
+      - name: Debug - state vs config
         working-directory: infra/ec2
         run: |
           echo "=== tfvars instance_type ==="
           grep ec2_instance_type "$GITHUB_WORKSPACE/infra/ec2/environments/dev.tfvars"
           echo "=== Terraform state instance_type ==="
-          terraform state show aws_instance.app 2>/dev/null | grep instance_type || echo "No state found for aws_instance.app"
+          terraform state show aws_instance.app 2>/dev/null | grep instance_type || echo "No state found"
           echo "=== Live AWS instance_type ==="
-          INSTANCE_ID=$(terraform state show aws_instance.app 2>/dev/null | grep '^\s*id\s*=' | awk '{print $3}' | tr -d '"')
+          INSTANCE_ID=$(terraform state show aws_instance.app 2>/dev/null | grep '^\s*id\s*=' | awk "{print \$3}" | tr -d """)
           if [ -n "$INSTANCE_ID" ]; then
             aws ec2 describe-instances --instance-ids "$INSTANCE_ID" \
-              --query 'Reservations[0].Instances[0].InstanceType' --output text
+              --query "Reservations[0].Instances[0].InstanceType" --output text
           else
             echo "No instance ID found in state"
           fi
@@ -120,228 +73,32 @@ jobs:
       - name: Terraform Plan (EC2 only)
         working-directory: infra/ec2
         run: |
-          terraform plan -var-file="$GITHUB_WORKSPACE/infra/ec2/environments/dev.tfvars" -target=aws_instance.app -out=ec2.tfplan
+          terraform plan \
+            -var-file="$GITHUB_WORKSPACE/infra/ec2/environments/dev.tfvars" \
+            -target=aws_instance.app \
+            -out=ec2.tfplan
           terraform show -json ec2.tfplan > ec2.tfplan.json
 
-      # ── Pretty Plan (tabular diff → step summary) ───────────────
       - name: Pretty Plan
         working-directory: infra/ec2
-        run: |
-          python3 - << 'PYEOF'
-import json, os, sys, traceback
+        run: python3 $GITHUB_WORKSPACE/scripts/pretty_plan.py
+        env:
+          PLAN_JSON: ec2.tfplan.json
 
-summary_file = os.environ["GITHUB_STEP_SUMMARY"]
-
-try:
-    with open("ec2.tfplan.json") as f:
-        plan = json.load(f)
-except Exception as e:
-    msg = f"## Terraform Plan - EC2 (dev)\n\nFailed to parse plan JSON: {e}\n"
-    print(msg)
-    open(summary_file, "a").write(msg)
-    sys.exit(0)
-
-ACTION_ICON = {
-    "create":  "create",
-    "update":  "update",
-    "delete":  "delete",
-    "replace": "replace",
-    "no-op":   "no-op",
-    "read":    "read",
-}
-
-SKIP_ATTRS = {"id", "arn", "tags_all", "timeouts", "owner_id",
-              "availability_zone", "placement_group"}
-
-def expand(prefix, bv, av, action):
-    if isinstance(bv, dict) or isinstance(av, dict):
-        bd = bv if isinstance(bv, dict) else {}
-        ad = av if isinstance(av, dict) else {}
-        for k in sorted(set(bd) | set(ad)):
-            bkv, akv = bd.get(k), ad.get(k)
-            if action == "create" and akv not in (None, ""):
-                yield f"{prefix}.{k}", "-", str(akv)
-            elif action == "delete" and bkv not in (None, ""):
-                yield f"{prefix}.{k}", str(bkv), "-"
-            elif action not in ("create", "delete") and bkv != akv:
-                yield (f"{prefix}.{k}",
-                       str(bkv) if bkv is not None else "-",
-                       str(akv)  if akv  is not None else "-")
-    else:
-        yield prefix, str(bv) if bv is not None else "-", str(av) if av is not None else "-"
-
-rows = []
-for rc in plan.get("resource_changes", []):
-    actions = rc.get("change", {}).get("actions", ["no-op"])
-    action  = "replace" if set(actions) == {"create","delete"} else (actions[0] if actions else "no-op")
-    if action == "no-op":
-        continue
-    address = rc.get("address", "")
-    before  = rc.get("change", {}).get("before") or {}
-    after   = rc.get("change", {}).get("after")  or {}
-    if action == "create":
-        candidates = {k: (None, v) for k, v in after.items()
-                      if k not in SKIP_ATTRS and v not in (None, "", [], {})}
-    elif action == "delete":
-        candidates = {k: (v, None) for k, v in before.items()
-                      if k not in SKIP_ATTRS and v not in (None, "", [], {})}
-    else:
-        candidates = {}
-        for k in set(before) | set(after):
-            if k in SKIP_ATTRS: continue
-            bv, av = before.get(k), after.get(k)
-            if bv != av:
-                candidates[k] = (bv, av)
-    for attr, (bv, av) in sorted(candidates.items()):
-        for attr_name, bstr, astr in expand(attr, bv, av, action):
-            rows.append({"action": action, "resource": address,
-                         "attribute": attr_name, "before": bstr, "after": astr})
-
-def trunc(val, n=50):
-    val = str(val).replace("\n", " ")
-    return val if len(val) <= n else val[:n-3] + "..."
-
-# ── Write to GITHUB_STEP_SUMMARY ──────────────────────────────
-try:
-    with open(summary_file, "a") as s:
-        s.write("## Terraform Plan - EC2 (dev)\n\n")
-        if not rows:
-            s.write("No changes - infrastructure is up to date.\n\n")
-        else:
-            s.write(f"**{len(rows)} change(s)** planned.\n\n")
-            s.write("| Action | Resource | Attribute | Before | After |\n")
-            s.write("|---|---|---|---|---|\n")
-            for r in rows:
-                s.write(f"| {r['action']} | `{trunc(r['resource'])}` | `{r['attribute']}` "
-                        f"| `{trunc(r['before'])}` | `{trunc(r['after'])}` |\n")
-            s.write("\n")
-    print("Summary written successfully.")
-except Exception:
-    print("ERROR writing summary:"); traceback.print_exc()
-
-# ── Print plain-text table to step log ────────────────────────
-if not rows:
-    print("\nNo changes - infrastructure is up to date.\n")
-else:
-    widths = [10, 30, 25, 25, 25]
-    headers = ["ACTION", "RESOURCE", "ATTRIBUTE", "BEFORE", "AFTER"]
-    sep = "+" + "+".join("-" * (w+2) for w in widths) + "+"
-    def row_line(vals):
-        return "|" + "|".join(f" {trunc(v, widths[i]).ljust(widths[i])} " for i, v in enumerate(vals)) + "|"
-    print(f"\nTerraform Plan - EC2 (dev)  [{len(rows)} change(s)]\n")
-    print(sep); print(row_line(headers)); print(sep)
-    for r in rows:
-        print(row_line([r["action"], r["resource"], r["attribute"], r["before"], r["after"]]))
-    print(sep); print()
-PYEOF
-
-      # ── AWS Pricing cost estimate (no API key needed) ────────────
       - name: AWS Pricing cost estimate
         working-directory: infra/ec2
-        run: |
-          python3 << 'EOF'
-          import json, boto3, sys, os
+        run: python3 $GITHUB_WORKSPACE/scripts/aws_pricing.py
+        env:
+          PLAN_JSON: ec2.tfplan.json
 
-          REGION = "us-east-1"
-
-          # ── Read instance type from plan JSON ──────────────────────
-          with open("ec2.tfplan.json") as f:
-              plan = json.load(f)
-
-          instance_type = None
-          ebs_gb        = 0
-          for rc in plan.get("resource_changes", []):
-              if rc.get("type") == "aws_instance":
-                  after = rc.get("change", {}).get("after", {})
-                  instance_type = after.get("instance_type", "t3.micro")
-                  for rbd in after.get("root_block_device", []):
-                      ebs_gb = rbd.get("volume_size", 0)
-              break
-
-          if not instance_type:
-              print("No aws_instance found in plan – skipping cost estimate")
-              sys.exit(0)
-
-          print(f"Instance type : {instance_type}")
-          print(f"Root EBS (gp3): {ebs_gb} GB")
-
-          # ── AWS Pricing API – EC2 On-Demand Linux ─────────────────
-          # Pricing API only available in us-east-1
-          pc = boto3.client("pricing", region_name="us-east-1")
-
-          resp = pc.get_products(
-              ServiceCode="AmazonEC2",
-              Filters=[
-                  {"Type": "TERM_MATCH", "Field": "instanceType",      "Value": instance_type},
-                  {"Type": "TERM_MATCH", "Field": "operatingSystem",   "Value": "Linux"},
-                  {"Type": "TERM_MATCH", "Field": "location",          "Value": "US East (N. Virginia)"},
-                  {"Type": "TERM_MATCH", "Field": "tenancy",           "Value": "Shared"},
-                  {"Type": "TERM_MATCH", "Field": "capacitystatus",    "Value": "Used"},
-                  {"Type": "TERM_MATCH", "Field": "preInstalledSw",    "Value": "NA"},
-              ],
-              MaxResults=1,
-          )
-
-          ec2_hourly = 0.0
-          if resp["PriceList"]:
-              price_item = json.loads(resp["PriceList"][0])
-              terms = price_item.get("terms", {}).get("OnDemand", {})
-              for term in terms.values():
-                  for pd in term.get("priceDimensions", {}).values():
-                      ec2_hourly = float(pd["pricePerUnit"].get("USD", 0))
-                      break
-
-          # ── AWS Pricing API – EBS gp3 ─────────────────────────────
-          ebs_resp = pc.get_products(
-              ServiceCode="AmazonEC2",
-              Filters=[
-                  {"Type": "TERM_MATCH", "Field": "volumeApiName",  "Value": "gp3"},
-                  {"Type": "TERM_MATCH", "Field": "location",       "Value": "US East (N. Virginia)"},
-                  {"Type": "TERM_MATCH", "Field": "productFamily",  "Value": "Storage"},
-              ],
-              MaxResults=1,
-          )
-
-          ebs_per_gb_month = 0.0
-          if ebs_resp["PriceList"]:
-              price_item = json.loads(ebs_resp["PriceList"][0])
-              terms = price_item.get("terms", {}).get("OnDemand", {})
-              for term in terms.values():
-                  for pd in term.get("priceDimensions", {}).values():
-                      ebs_per_gb_month = float(pd["pricePerUnit"].get("USD", 0))
-                      break
-
-          # ── Calculate totals ───────────────────────────────────────
-          ec2_monthly  = ec2_hourly * 24 * 30
-          ebs_monthly  = ebs_per_gb_month * ebs_gb
-          total_monthly = ec2_monthly + ebs_monthly
-
-          summary = f"""## AWS Pricing Cost Estimate – EC2 (dev)
-
-          | Resource | Detail | $/hr | $/month |
-          |---|---|---|---|
-          | EC2 instance | {instance_type} (On-Demand Linux) | \${ec2_hourly:.4f} | \${ec2_monthly:.2f} |
-          | EBS volume   | {ebs_gb} GB gp3 | – | \${ebs_monthly:.2f} |
-          | **Total** | | | **\${total_monthly:.2f}** |
-
-          > Prices: On-Demand, us-east-1, no Reserved/Savings Plan discount.
-          """
-
-          print(summary)
-          with open(os.environ["GITHUB_STEP_SUMMARY"], "a") as s:
-              s.write(summary + "\n")
-          EOF
-
-      # ── Apply ─────────────────────────────────────────────────────
       - name: Terraform Apply (EC2 only)
         working-directory: infra/ec2
         run: terraform apply -auto-approve ec2.tfplan
 
-      # ── Outputs ───────────────────────────────────────────────────
       - name: Show EC2 Outputs
         working-directory: infra/ec2
         run: |
-          echo "Instance ID : $(terraform output -raw ec2_instance_id)"
-          echo "Private IP  : $(terraform output -raw ec2_private_ip)"
+          echo "Instance ID   : $(terraform output -raw ec2_instance_id)"
+          echo "Private IP    : $(terraform output -raw ec2_private_ip)"
           echo "Security Group: $(terraform output -raw ec2_security_group_id)"
-          echo "AMI ID      : $(terraform output -raw ec2_ami_id)"
+          echo "AMI ID        : $(terraform output -raw ec2_ami_id)"
