@@ -68,25 +68,102 @@ jobs:
           echo "Plan output:"
           cat /tmp/plan.txt
 
-      # ── Infracost (cost estimate) ─────────────────────────────────
-      - name: Setup Infracost
-        uses: infracost/actions/setup@v3
-        with:
-          api-key: ${{ secrets.INFRACOST_API_KEY }}
-
-      - name: Infracost breakdown
+      # ── AWS Pricing cost estimate (no API key needed) ────────────
+      - name: AWS Pricing cost estimate
         working-directory: infra/ec2
         run: |
-          infracost breakdown \
-            --path=ec2.tfplan.json \
-            --format=table \
-            --no-cache \
-            --log-level=warn | tee /tmp/infracost.txt
-          echo "## Infracost – EC2 (dev)" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo '```' >> $GITHUB_STEP_SUMMARY
-          cat /tmp/infracost.txt >> $GITHUB_STEP_SUMMARY
-          echo '```' >> $GITHUB_STEP_SUMMARY
+          python3 << 'EOF'
+          import json, boto3, sys, os
+
+          REGION = "us-east-1"
+
+          # ── Read instance type from plan JSON ──────────────────────
+          with open("ec2.tfplan.json") as f:
+              plan = json.load(f)
+
+          instance_type = None
+          ebs_gb        = 0
+          for rc in plan.get("resource_changes", []):
+              if rc.get("type") == "aws_instance":
+                  after = rc.get("change", {}).get("after", {})
+                  instance_type = after.get("instance_type", "t3.micro")
+                  for rbd in after.get("root_block_device", []):
+                      ebs_gb = rbd.get("volume_size", 0)
+              break
+
+          if not instance_type:
+              print("No aws_instance found in plan – skipping cost estimate")
+              sys.exit(0)
+
+          print(f"Instance type : {instance_type}")
+          print(f"Root EBS (gp3): {ebs_gb} GB")
+
+          # ── AWS Pricing API – EC2 On-Demand Linux ─────────────────
+          # Pricing API only available in us-east-1
+          pc = boto3.client("pricing", region_name="us-east-1")
+
+          resp = pc.get_products(
+              ServiceCode="AmazonEC2",
+              Filters=[
+                  {"Type": "TERM_MATCH", "Field": "instanceType",      "Value": instance_type},
+                  {"Type": "TERM_MATCH", "Field": "operatingSystem",   "Value": "Linux"},
+                  {"Type": "TERM_MATCH", "Field": "location",          "Value": "US East (N. Virginia)"},
+                  {"Type": "TERM_MATCH", "Field": "tenancy",           "Value": "Shared"},
+                  {"Type": "TERM_MATCH", "Field": "capacitystatus",    "Value": "Used"},
+                  {"Type": "TERM_MATCH", "Field": "preInstalledSw",    "Value": "NA"},
+              ],
+              MaxResults=1,
+          )
+
+          ec2_hourly = 0.0
+          if resp["PriceList"]:
+              price_item = json.loads(resp["PriceList"][0])
+              terms = price_item.get("terms", {}).get("OnDemand", {})
+              for term in terms.values():
+                  for pd in term.get("priceDimensions", {}).values():
+                      ec2_hourly = float(pd["pricePerUnit"].get("USD", 0))
+                      break
+
+          # ── AWS Pricing API – EBS gp3 ─────────────────────────────
+          ebs_resp = pc.get_products(
+              ServiceCode="AmazonEC2",
+              Filters=[
+                  {"Type": "TERM_MATCH", "Field": "volumeApiName",  "Value": "gp3"},
+                  {"Type": "TERM_MATCH", "Field": "location",       "Value": "US East (N. Virginia)"},
+                  {"Type": "TERM_MATCH", "Field": "productFamily",  "Value": "Storage"},
+              ],
+              MaxResults=1,
+          )
+
+          ebs_per_gb_month = 0.0
+          if ebs_resp["PriceList"]:
+              price_item = json.loads(ebs_resp["PriceList"][0])
+              terms = price_item.get("terms", {}).get("OnDemand", {})
+              for term in terms.values():
+                  for pd in term.get("priceDimensions", {}).values():
+                      ebs_per_gb_month = float(pd["pricePerUnit"].get("USD", 0))
+                      break
+
+          # ── Calculate totals ───────────────────────────────────────
+          ec2_monthly  = ec2_hourly * 24 * 30
+          ebs_monthly  = ebs_per_gb_month * ebs_gb
+          total_monthly = ec2_monthly + ebs_monthly
+
+          summary = f"""## AWS Pricing Cost Estimate – EC2 (dev)
+
+          | Resource | Detail | $/hr | $/month |
+          |---|---|---|---|
+          | EC2 instance | {instance_type} (On-Demand Linux) | \${ec2_hourly:.4f} | \${ec2_monthly:.2f} |
+          | EBS volume   | {ebs_gb} GB gp3 | – | \${ebs_monthly:.2f} |
+          | **Total** | | | **\${total_monthly:.2f}** |
+
+          > Prices: On-Demand, us-east-1, no Reserved/Savings Plan discount.
+          """
+
+          print(summary)
+          with open(os.environ["GITHUB_STEP_SUMMARY"], "a") as s:
+              s.write(summary + "\n")
+          EOF
 
       # ── Apply ─────────────────────────────────────────────────────
       - name: Terraform Apply (EC2 only)
