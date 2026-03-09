@@ -55,11 +55,14 @@ jobs:
       - name: Pretty Plan
         working-directory: infra/ec2
         run: |
+          terraform show -no-color ec2.tfplan > /tmp/plan.txt
           echo "## Terraform Plan – EC2 (dev)" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
-          echo '```hcl' >> $GITHUB_STEP_SUMMARY
-          terraform show -no-color ec2.tfplan >> $GITHUB_STEP_SUMMARY
+          echo '```diff' >> $GITHUB_STEP_SUMMARY
+          cat /tmp/plan.txt >> $GITHUB_STEP_SUMMARY
           echo '```' >> $GITHUB_STEP_SUMMARY
+          echo "Plan output:"
+          cat /tmp/plan.txt
 
       # ── Infracost (cost estimate) ─────────────────────────────────
       - name: Setup Infracost
