@@ -49,7 +49,9 @@ jobs:
       # ── Plan ─────────────────────────────────────────────────────
       - name: Terraform Plan (EC2 only)
         working-directory: infra/ec2
-        run: terraform plan -var-file="$GITHUB_WORKSPACE/infra/ec2/environments/dev.tfvars" -target=aws_instance.app -out=ec2.tfplan
+        run: |
+          terraform plan -var-file="$GITHUB_WORKSPACE/infra/ec2/environments/dev.tfvars" -target=aws_instance.app -out=ec2.tfplan
+          terraform show -json ec2.tfplan > ec2.tfplan.json
 
       # ── Pretty Plan (visual diff → step summary) ─────────────────
       - name: Pretty Plan
@@ -74,7 +76,7 @@ jobs:
         working-directory: infra/ec2
         run: |
           infracost breakdown \
-            --path=ec2.tfplan \
+            --path=ec2.tfplan.json \
             --format=table \
             --no-cache \
             --log-level=warn | tee /tmp/infracost.txt
