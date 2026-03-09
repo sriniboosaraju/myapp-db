@@ -25,6 +25,21 @@ jobs:
           scan-ref: infra/ec2
           exit-code: '0'           # don't block the run, just report
           format: table
+          output: /tmp/trivy.txt
+
+      - name: Trivy results → summary
+        run: |
+          {
+            echo "## Trivy Security Scan – EC2 (dev)"
+            echo ""
+            if [ -s /tmp/trivy.txt ]; then
+              echo '```'
+              cat /tmp/trivy.txt
+              echo '```'
+            else
+              echo "✅ No misconfigurations found."
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"
 
       # ── AWS auth & Terraform setup ───────────────────────────────
       - name: Configure AWS Credentials via OIDC
