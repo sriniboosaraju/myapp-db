@@ -6,8 +6,6 @@ permissions:
 
 on:
   workflow_dispatch:
-    branches:
-      - pp
 
 jobs:
   ec2-provision:
