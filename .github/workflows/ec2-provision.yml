@@ -39,7 +39,7 @@ jobs:
 
       - name: Terraform Plan (EC2 only)
         working-directory: infra/ec2
-        run: terraform plan -var-file="environments/dev.tfvars" -target=aws_instance.app -out=ec2.tfplan
+        run: terraform plan -var-file="$GITHUB_WORKSPACE/infra/ec2/environments/dev.tfvars" -target=aws_instance.app -out=ec2.tfplan
 
       - name: Terraform Apply (EC2 only)
         working-directory: infra/ec2
