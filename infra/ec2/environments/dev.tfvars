@@ -11,7 +11,7 @@ ec2_ami                  = ""       # leave empty to use latest Amazon Linux 202
 ec2_subnet_id            = ""       # leave empty to use first private subnet
 ec2_key_name             = ""       # leave empty to disable key-based SSH
 ec2_ssh_cidr             = ""       # leave empty to disable SSH ingress rule
-ec2_root_volume_size  
+ec2_root_volume_size     = 20
 ec2_associate_public_ip  = false
 ec2_create_eip           = false
 ec2_extra_security_group_ids = []
