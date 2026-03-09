@@ -1,0 +1,54 @@
+name: EC2 Provision (Test)
+
+permissions:
+  contents: read
+  id-token: write
+
+on:
+  workflow_dispatch:
+
+jobs:
+  ec2-provision:
+    name: EC2 Plan & Apply (dev)
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Configure AWS Credentials via OIDC
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE_TO_ASSUME }}
+          aws-region: us-east-1
+          role-session-name: GitHubActions-EC2-dev-${{ github.run_id }}
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: '1.7.0'
+          terraform_wrapper: false
+
+      - name: Terraform Init
+        working-directory: infra/ec2
+        run: |
+          terraform init \
+            -backend-config="bucket=${{ secrets.TF_STATE_BUCKET }}" \
+            -backend-config="key=myapp-db/dev/ec2/terraform.tfstate" \
+            -backend-config="region=us-east-1"
+
+      - name: Terraform Plan (EC2 only)
+        working-directory: infra/ec2
+        run: terraform plan -var-file="environments/dev.tfvars" -target=aws_instance.app -out=ec2.tfplan
+
+      - name: Terraform Apply (EC2 only)
+        working-directory: infra/ec2
+        run: terraform apply -auto-approve ec2.tfplan
+
+      - name: Show EC2 Outputs
+        working-directory: infra/ec2
+        run: |
+          echo "Instance ID : $(terraform output -raw ec2_instance_id)"
+          echo "Private IP  : $(terraform output -raw ec2_private_ip)"
+          echo "Security Group: $(terraform output -raw ec2_security_group_id)"
+          echo "AMI ID      : $(terraform output -raw ec2_ami_id)"
