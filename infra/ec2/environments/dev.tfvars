@@ -6,7 +6,7 @@ vpc_id             = "vpc-0be61d79fb9ca8112"
 private_subnet_ids = ["subnet-02ee6e6c8b19a3a7b", "subnet-0013af5c9a372e0f8"]
 
 # EC2 configuration
-ec2_instance_type        = "t3.medium"
+ec2_instance_type        = "t3.micro"
 ec2_ami                  = ""       # leave empty to use latest Amazon Linux 2023
 ec2_subnet_id            = ""       # leave empty to use first private subnet
 ec2_key_name             = ""       # leave empty to disable key-based SSH
