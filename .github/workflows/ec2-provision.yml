@@ -16,6 +16,8 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
+        with:
+          ref: pp   # always use pp branch — where changes are made
 
       # ── Security scan ────────────────────────────────────────────
       - name: tfsec (security scan)
