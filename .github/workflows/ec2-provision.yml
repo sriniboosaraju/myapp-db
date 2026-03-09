@@ -123,27 +123,108 @@ jobs:
           terraform plan -var-file="$GITHUB_WORKSPACE/infra/ec2/environments/dev.tfvars" -target=aws_instance.app -out=ec2.tfplan
           terraform show -json ec2.tfplan > ec2.tfplan.json
 
-      # ── Pretty Plan (visual diff → step summary) ─────────────────
+      # ── Pretty Plan (tabular diff → step summary) ───────────────
       - name: Pretty Plan
         working-directory: infra/ec2
         run: |
-          terraform show -no-color ec2.tfplan 2>&1 | tee /tmp/plan.txt
-          PLAN_SIZE=$(wc -c < /tmp/plan.txt | tr -d ' ')
-          echo "Plan file size: ${PLAN_SIZE} bytes"
+          python3 << 'EOF'
+          import json, os
 
-          if [ "$PLAN_SIZE" -eq "0" ]; then
-            PLAN_CONTENT="No changes — infrastructure is up to date."
-          else
-            PLAN_CONTENT=$(cat /tmp/plan.txt)
-          fi
+          summary_file = os.environ["GITHUB_STEP_SUMMARY"]
 
-          {
-            echo "## Terraform Plan – EC2 (dev)"
-            echo ""
-            echo '```diff'
-            echo "$PLAN_CONTENT"
-            echo '```'
-          } >> "$GITHUB_STEP_SUMMARY"
+          try:
+              with open("ec2.tfplan.json") as f:
+                  plan = json.load(f)
+          except Exception as e:
+              with open(summary_file, "a") as s:
+                  s.write(f"## Terraform Plan – EC2 (dev)\n\n❌ Failed to parse plan JSON: {e}\n")
+              exit(0)
+
+          action_icon = {
+              "create":      "➕ create",
+              "update":      "🔄 update",
+              "delete":      "🗑️ delete",
+              "replace":     "♻️ replace",
+              "no-op":       "✅ no-op",
+              "read":        "📖 read",
+          }
+
+          # Attributes to skip (internal / noise)
+          SKIP_ATTRS = {
+              "id", "arn", "tags_all", "timeouts", "owner_id",
+              "availability_zone", "placement_group",
+          }
+
+          rows = []
+          for rc in plan.get("resource_changes", []):
+              actions = rc.get("change", {}).get("actions", ["no-op"])
+              # Normalise ["create","delete"] → "replace"
+              if set(actions) == {"create", "delete"}:
+                  action_key = "replace"
+              else:
+                  action_key = actions[0] if actions else "no-op"
+
+              if action_key == "no-op":
+                  continue
+
+              address = rc.get("address", "")
+              before  = rc.get("change", {}).get("before") or {}
+              after   = rc.get("change", {}).get("after")  or {}
+
+              if action_key == "create":
+                  # Show key attributes being set
+                  attrs_to_show = {
+                      k: (None, v)
+                      for k, v in after.items()
+                      if k not in SKIP_ATTRS and v not in (None, "", [], {})
+                  }
+              elif action_key == "delete":
+                  attrs_to_show = {
+                      k: (v, None)
+                      for k, v in before.items()
+                      if k not in SKIP_ATTRS and v not in (None, "", [], {})
+                  }
+              else:
+                  # update / replace – show only changed attrs
+                  attrs_to_show = {}
+                  all_keys = set(before.keys()) | set(after.keys())
+                  for k in all_keys:
+                      if k in SKIP_ATTRS:
+                          continue
+                      bv = before.get(k)
+                      av = after.get(k)
+                      if bv != av:
+                          attrs_to_show[k] = (bv, av)
+
+              for attr, (bv, av) in attrs_to_show.items():
+                  rows.append({
+                      "action":    action_key,
+                      "resource":  address,
+                      "attribute": attr,
+                      "before":    str(bv) if bv is not None else "–",
+                      "after":     str(av) if av is not None else "–",
+                  })
+
+          def fmt(val: str, max_len: int = 60) -> str:
+              val = val.replace("|", "\\|")
+              return val if len(val) <= max_len else val[:max_len - 3] + "..."
+
+          with open(summary_file, "a") as s:
+              s.write("## Terraform Plan – EC2 (dev)\n\n")
+              if not rows:
+                  s.write("✅ No changes — infrastructure is up to date.\n\n")
+              else:
+                  s.write(f"**{len(rows)} attribute change(s)** planned.\n\n")
+                  s.write("| Action | Resource | Attribute | Before | After |\n")
+                  s.write("|---|---|---|---|---|\n")
+                  for r in rows:
+                      icon = action_icon.get(r["action"], r["action"])
+                      s.write(
+                          f"| {icon} | `{fmt(r['resource'])}` | `{r['attribute']}` "
+                          f"| `{fmt(r['before'])}` | `{fmt(r['after'])}` |\n"
+                      )
+                  s.write("\n")
+          EOF
 
       # ── AWS Pricing cost estimate (no API key needed) ────────────
       - name: AWS Pricing cost estimate
