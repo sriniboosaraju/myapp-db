@@ -59,16 +59,21 @@ jobs:
       - name: Pretty Plan
         working-directory: infra/ec2
         run: |
-          # Capture stdout+stderr, print to log and file simultaneously
           terraform show -no-color ec2.tfplan 2>&1 | tee /tmp/plan.txt
-          PLAN_SIZE=$(wc -c < /tmp/plan.txt)
+          PLAN_SIZE=$(wc -c < /tmp/plan.txt | tr -d ' ')
           echo "Plan file size: ${PLAN_SIZE} bytes"
+
+          if [ "$PLAN_SIZE" -eq "0" ]; then
+            PLAN_CONTENT="No changes — infrastructure is up to date."
+          else
+            PLAN_CONTENT=$(cat /tmp/plan.txt)
+          fi
 
           {
             echo "## Terraform Plan – EC2 (dev)"
             echo ""
             echo '```diff'
-            cat /tmp/plan.txt
+            echo "$PLAN_CONTENT"
             echo '```'
           } >> "$GITHUB_STEP_SUMMARY"
 
