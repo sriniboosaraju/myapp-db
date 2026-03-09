@@ -3,6 +3,7 @@ name: EC2 Provision (Test)
 permissions:
   contents: read
   id-token: write
+  pull-requests: write  # needed to post plan comments on PRs
 
 on:
   workflow_dispatch:
@@ -16,6 +17,14 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
+      # ── Security scan ────────────────────────────────────────────
+      - name: tfsec (security scan)
+        uses: aquasecurity/tfsec-action@v1.0.0
+        with:
+          working_directory: infra/ec2
+          soft_fail: true          # don't block the run, just report
+
+      # ── AWS auth & Terraform setup ───────────────────────────────
       - name: Configure AWS Credentials via OIDC
         uses: aws-actions/configure-aws-credentials@v4
         with:
@@ -37,14 +46,47 @@ jobs:
             -backend-config="key=myapp-db/dev/ec2/terraform.tfstate" \
             -backend-config="region=us-east-1"
 
+      # ── Plan ─────────────────────────────────────────────────────
       - name: Terraform Plan (EC2 only)
         working-directory: infra/ec2
         run: terraform plan -var-file="$GITHUB_WORKSPACE/infra/ec2/environments/dev.tfvars" -target=aws_instance.app -out=ec2.tfplan
 
+      # ── Pretty Plan (visual diff → step summary) ─────────────────
+      - name: Pretty Plan
+        working-directory: infra/ec2
+        run: |
+          echo "## Terraform Plan – EC2 (dev)" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo '```hcl' >> $GITHUB_STEP_SUMMARY
+          terraform show -no-color ec2.tfplan >> $GITHUB_STEP_SUMMARY
+          echo '```' >> $GITHUB_STEP_SUMMARY
+
+      # ── Infracost (cost estimate) ─────────────────────────────────
+      - name: Setup Infracost
+        uses: infracost/actions/setup@v3
+        with:
+          api-key: ${{ secrets.INFRACOST_API_KEY }}
+
+      - name: Infracost breakdown
+        working-directory: infra/ec2
+        run: |
+          infracost breakdown \
+            --path=ec2.tfplan \
+            --format=table \
+            --no-cache \
+            --log-level=warn | tee /tmp/infracost.txt
+          echo "## Infracost – EC2 (dev)" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo '```' >> $GITHUB_STEP_SUMMARY
+          cat /tmp/infracost.txt >> $GITHUB_STEP_SUMMARY
+          echo '```' >> $GITHUB_STEP_SUMMARY
+
+      # ── Apply ─────────────────────────────────────────────────────
       - name: Terraform Apply (EC2 only)
         working-directory: infra/ec2
         run: terraform apply -auto-approve ec2.tfplan
 
+      # ── Outputs ───────────────────────────────────────────────────
       - name: Show EC2 Outputs
         working-directory: infra/ec2
         run: |
