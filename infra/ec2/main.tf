@@ -153,7 +153,7 @@ resource "aws_instance" "app" {
   }))
 
   tags = {
-    Name        = "Demo-ec2"
+    Name        = "Demo-srini-ec2"
     Environment = var.environment
     AppName     = var.app_name
     ManagedBy   = "Terraform"
