@@ -153,7 +153,7 @@ resource "aws_instance" "app" {
   }))
 
   tags = {
-    Name        = "oct-ec2"
+    Name        = "oct-pp-ec2"
     Environment = var.environment
     AppName     = var.app_name
     ManagedBy   = "Terraform"
