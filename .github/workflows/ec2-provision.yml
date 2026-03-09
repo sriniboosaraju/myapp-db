@@ -127,128 +127,113 @@ jobs:
       - name: Pretty Plan
         working-directory: infra/ec2
         run: |
-          python3 << 'EOF'
-          import json, os
+          python3 - << 'PYEOF'
+import json, os, sys, traceback
 
-          summary_file = os.environ["GITHUB_STEP_SUMMARY"]
+summary_file = os.environ["GITHUB_STEP_SUMMARY"]
 
-          try:
-              with open("ec2.tfplan.json") as f:
-                  plan = json.load(f)
-          except Exception as e:
-              with open(summary_file, "a") as s:
-                  s.write(f"## Terraform Plan – EC2 (dev)\n\n❌ Failed to parse plan JSON: {e}\n")
-              exit(0)
+try:
+    with open("ec2.tfplan.json") as f:
+        plan = json.load(f)
+except Exception as e:
+    msg = f"## Terraform Plan - EC2 (dev)\n\nFailed to parse plan JSON: {e}\n"
+    print(msg)
+    open(summary_file, "a").write(msg)
+    sys.exit(0)
 
-          action_icon = {
-              "create":  "➕ create",
-              "update":  "🔄 update",
-              "delete":  "🗑️ delete",
-              "replace": "♻️ replace",
-              "no-op":   "✅ no-op",
-              "read":    "📖 read",
-          }
+ACTION_ICON = {
+    "create":  "create",
+    "update":  "update",
+    "delete":  "delete",
+    "replace": "replace",
+    "no-op":   "no-op",
+    "read":    "read",
+}
 
-          # Top-level attributes to skip entirely (internal metadata)
-          SKIP_ATTRS = {
-              "id", "arn", "tags_all", "timeouts", "owner_id",
-              "availability_zone", "placement_group",
-          }
+SKIP_ATTRS = {"id", "arn", "tags_all", "timeouts", "owner_id",
+              "availability_zone", "placement_group"}
 
-          def scalar(v):
-              """Return True if v is a plain value (not a nested dict/list-of-dicts)."""
-              if isinstance(v, dict):
-                  return False
-              if isinstance(v, list) and v and isinstance(v[0], dict):
-                  return False
-              return True
+def expand(prefix, bv, av, action):
+    if isinstance(bv, dict) or isinstance(av, dict):
+        bd = bv if isinstance(bv, dict) else {}
+        ad = av if isinstance(av, dict) else {}
+        for k in sorted(set(bd) | set(ad)):
+            bkv, akv = bd.get(k), ad.get(k)
+            if action == "create" and akv not in (None, ""):
+                yield f"{prefix}.{k}", "-", str(akv)
+            elif action == "delete" and bkv not in (None, ""):
+                yield f"{prefix}.{k}", str(bkv), "-"
+            elif action not in ("create", "delete") and bkv != akv:
+                yield (f"{prefix}.{k}",
+                       str(bkv) if bkv is not None else "-",
+                       str(akv)  if akv  is not None else "-")
+    else:
+        yield prefix, str(bv) if bv is not None else "-", str(av) if av is not None else "-"
 
-          def expand_attr(prefix, bv, av, action_key):
-              """
-              Yield (attribute_name, before_str, after_str) rows.
-              Expands dict-valued attributes (e.g. tags) into one row per changed key.
-              """
-              if isinstance(bv, dict) or isinstance(av, dict):
-                  bd = bv if isinstance(bv, dict) else {}
-                  ad = av if isinstance(av, dict) else {}
-                  all_keys = sorted(set(bd.keys()) | set(ad.keys()))
-                  for k in all_keys:
-                      bkv = bd.get(k)
-                      akv = ad.get(k)
-                      if action_key == "create":
-                          if akv not in (None, ""):
-                              yield f"{prefix}.{k}", "–", str(akv)
-                      elif action_key == "delete":
-                          if bkv not in (None, ""):
-                              yield f"{prefix}.{k}", str(bkv), "–"
-                      else:
-                          if bkv != akv:
-                              yield f"{prefix}.{k}", str(bkv) if bkv is not None else "–", str(akv) if akv is not None else "–"
-              else:
-                  bstr = str(bv) if bv is not None else "–"
-                  astr = str(av) if av is not None else "–"
-                  yield prefix, bstr, astr
+rows = []
+for rc in plan.get("resource_changes", []):
+    actions = rc.get("change", {}).get("actions", ["no-op"])
+    action  = "replace" if set(actions) == {"create","delete"} else (actions[0] if actions else "no-op")
+    if action == "no-op":
+        continue
+    address = rc.get("address", "")
+    before  = rc.get("change", {}).get("before") or {}
+    after   = rc.get("change", {}).get("after")  or {}
+    if action == "create":
+        candidates = {k: (None, v) for k, v in after.items()
+                      if k not in SKIP_ATTRS and v not in (None, "", [], {})}
+    elif action == "delete":
+        candidates = {k: (v, None) for k, v in before.items()
+                      if k not in SKIP_ATTRS and v not in (None, "", [], {})}
+    else:
+        candidates = {}
+        for k in set(before) | set(after):
+            if k in SKIP_ATTRS: continue
+            bv, av = before.get(k), after.get(k)
+            if bv != av:
+                candidates[k] = (bv, av)
+    for attr, (bv, av) in sorted(candidates.items()):
+        for attr_name, bstr, astr in expand(attr, bv, av, action):
+            rows.append({"action": action, "resource": address,
+                         "attribute": attr_name, "before": bstr, "after": astr})
 
-          rows = []
-          for rc in plan.get("resource_changes", []):
-              actions = rc.get("change", {}).get("actions", ["no-op"])
-              if set(actions) == {"create", "delete"}:
-                  action_key = "replace"
-              else:
-                  action_key = actions[0] if actions else "no-op"
+def trunc(val, n=50):
+    val = str(val).replace("\n", " ")
+    return val if len(val) <= n else val[:n-3] + "..."
 
-              if action_key == "no-op":
-                  continue
+# ── Write to GITHUB_STEP_SUMMARY ──────────────────────────────
+try:
+    with open(summary_file, "a") as s:
+        s.write("## Terraform Plan - EC2 (dev)\n\n")
+        if not rows:
+            s.write("No changes - infrastructure is up to date.\n\n")
+        else:
+            s.write(f"**{len(rows)} change(s)** planned.\n\n")
+            s.write("| Action | Resource | Attribute | Before | After |\n")
+            s.write("|---|---|---|---|---|\n")
+            for r in rows:
+                s.write(f"| {r['action']} | `{trunc(r['resource'])}` | `{r['attribute']}` "
+                        f"| `{trunc(r['before'])}` | `{trunc(r['after'])}` |\n")
+            s.write("\n")
+    print("Summary written successfully.")
+except Exception:
+    print("ERROR writing summary:"); traceback.print_exc()
 
-              address = rc.get("address", "")
-              before  = rc.get("change", {}).get("before") or {}
-              after   = rc.get("change", {}).get("after")  or {}
-
-              if action_key == "create":
-                  candidates = {k: (None, v) for k, v in after.items()
-                                if k not in SKIP_ATTRS and v not in (None, "", [], {})}
-              elif action_key == "delete":
-                  candidates = {k: (v, None) for k, v in before.items()
-                                if k not in SKIP_ATTRS and v not in (None, "", [], {})}
-              else:
-                  candidates = {}
-                  for k in set(before.keys()) | set(after.keys()):
-                      if k in SKIP_ATTRS:
-                          continue
-                      bv, av = before.get(k), after.get(k)
-                      if bv != av:
-                          candidates[k] = (bv, av)
-
-              for attr, (bv, av) in sorted(candidates.items()):
-                  for attr_name, bstr, astr in expand_attr(attr, bv, av, action_key):
-                      rows.append({
-                          "action":    action_key,
-                          "resource":  address,
-                          "attribute": attr_name,
-                          "before":    bstr,
-                          "after":     astr,
-                      })
-
-          def fmt(val: str, max_len: int = 55) -> str:
-              val = val.replace("|", "\\|").replace("\n", " ")
-              return val if len(val) <= max_len else val[:max_len - 3] + "..."
-
-          with open(summary_file, "a") as s:
-              s.write("## Terraform Plan – EC2 (dev)\n\n")
-              if not rows:
-                  s.write("✅ No changes — infrastructure is up to date.\n\n")
-              else:
-                  s.write(f"**{len(rows)} change(s)** planned.\n\n")
-                  s.write("| Action | Resource | Attribute | Before | After |\n")
-                  s.write("|---|---|---|---|---|\n")
-                  for r in rows:
-                      icon = action_icon.get(r["action"], r["action"])
-                      s.write(
-                          f"| {icon} | `{fmt(r['resource'])}` | `{r['attribute']}` "
-                          f"| `{fmt(r['before'])}` | `{fmt(r['after'])}` |\n"
-                      )
-                  s.write("\n")
-          EOF
+# ── Print plain-text table to step log ────────────────────────
+if not rows:
+    print("\nNo changes - infrastructure is up to date.\n")
+else:
+    widths = [10, 30, 25, 25, 25]
+    headers = ["ACTION", "RESOURCE", "ATTRIBUTE", "BEFORE", "AFTER"]
+    sep = "+" + "+".join("-" * (w+2) for w in widths) + "+"
+    def row_line(vals):
+        return "|" + "|".join(f" {trunc(v, widths[i]).ljust(widths[i])} " for i, v in enumerate(vals)) + "|"
+    print(f"\nTerraform Plan - EC2 (dev)  [{len(rows)} change(s)]\n")
+    print(sep); print(row_line(headers)); print(sep)
+    for r in rows:
+        print(row_line([r["action"], r["resource"], r["attribute"], r["before"], r["after"]]))
+    print(sep); print()
+PYEOF
 
       # ── AWS Pricing cost estimate (no API key needed) ────────────
       - name: AWS Pricing cost estimate
