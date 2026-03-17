@@ -8,7 +8,7 @@ spec:
   source:
     repoURL: public.ecr.aws/karpenter
     chart: karpenter
-    targetRevision: 1.0.0
+    targetRevision: 1.2.3
     helm:
       values: |
         settings:

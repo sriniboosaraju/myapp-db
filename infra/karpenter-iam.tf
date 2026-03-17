@@ -248,6 +248,12 @@ resource "aws_iam_policy" "karpenter_controller" {
         Resource = "*"
       },
       {
+        Sid      = "AllowPricingReadActions"
+        Effect   = "Allow"
+        Action   = "pricing:GetProducts"
+        Resource = "*"
+      },
+      {
         Sid      = "AllowSSMReadActions"
         Effect   = "Allow"
         Action   = "ssm:GetParameter"
