@@ -6,16 +6,25 @@ metadata:
 spec:
   project: default
 
-  sources:
-    - repoURL: https://charts.karpenter.sh
-      chart: karpenter
-      targetRevision: v0.37.0
-      helm:
-        valueFiles:
-          - $values/charts/karpenter/values.yaml
-    - repoURL: https://github.com/sriniboosaraju/myapp-db
-      targetRevision: HEAD
-      ref: values
+  source:
+    repoURL: https://charts.karpenter.sh
+    chart: karpenter
+    targetRevision: v0.37.0
+    helm:
+      values: |
+        settings:
+          clusterName: eks-srini
+          clusterEndpoint: https://943D669DBB44E4CFBF30A466AD36BC2D.gr7.us-east-1.eks.amazonaws.com
+        serviceAccount:
+          create: true
+          name: karpenter
+          annotations:
+            eks.amazonaws.com/role-arn: arn:aws:iam::479604670156:role/KarpenterControllerRole-eks-srini
+        controller:
+          resources:
+            requests:
+              cpu: 500m
+              memory: 512Mi
 
   destination:
     server: https://kubernetes.default.svc

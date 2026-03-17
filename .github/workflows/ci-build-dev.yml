@@ -132,14 +132,13 @@ jobs:
         sudo wget -qO /usr/local/bin/yq https://github.com/mikefarah/yq/releases/latest/download/yq_linux_amd64
         sudo chmod +x /usr/local/bin/yq
 
-        echo "Updating clusterEndpoint and role ARN in charts/karpenter/values.yaml"
-        yq -i ".settings.clusterEndpoint = \"${EKS_ENDPOINT}\"" charts/karpenter/values.yaml
-        yq -i ".serviceAccount.annotations[\"eks.amazonaws.com/role-arn\"] = \"${KARPENTER_ROLE_ARN}\"" charts/karpenter/values.yaml
+        echo "Updating karpenter-app.yaml inline values"
+        yq -i ".spec.source.helm.values = \"settings:\n  clusterName: eks-srini\n  clusterEndpoint: ${EKS_ENDPOINT}\nserviceAccount:\n  create: true\n  name: karpenter\n  annotations:\n    eks.amazonaws.com/role-arn: ${KARPENTER_ROLE_ARN}\ncontroller:\n  resources:\n    requests:\n      cpu: 500m\n      memory: 512Mi\n\"" deploy/platform/karpenter-app.yaml
 
         # Commit if changed
         git config user.name "github-actions[bot]"
         git config user.email "github-actions[bot]@users.noreply.github.com"
-        git add charts/karpenter/values.yaml
+        git add deploy/platform/karpenter-app.yaml
         git commit -m "ci: update karpenter clusterEndpoint and role ARN [ci skip]" || echo "No changes to commit"
         git pull --rebase origin dev
         git push origin HEAD:dev
