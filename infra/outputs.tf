@@ -44,6 +44,11 @@ output "db_security_group_id" {
   value       = aws_security_group.postgres.id
 }
 
+output "db_credentials_secret_arn" {
+  description = "The ARN of the Secrets Manager secret containing DB credentials"
+  value       = aws_secretsmanager_secret.db_credentials.arn
+}
+
 output "db_subnet_group_name" {
   description = "The DB subnet group name"
   value       = aws_db_subnet_group.postgres.name

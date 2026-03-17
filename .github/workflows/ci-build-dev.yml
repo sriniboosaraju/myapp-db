@@ -119,11 +119,11 @@ jobs:
         fi
         
         # Get database credentials from Terraform state
-        DB_HOST=$(terraform output -raw db_instance_address)
-        DB_PORT=$(terraform output -raw db_instance_port)
-        DB_NAME=$(terraform output -raw db_instance_name)
-        DB_USER=$(terraform output -raw db_instance_username)
-        DB_SECRET_ARN=$(terraform output -raw db_credentials_secret_arn)
+        DB_HOST=$(terraform output -raw db_instance_address 2>/dev/null)
+        DB_PORT=$(terraform output -raw db_instance_port 2>/dev/null)
+        DB_NAME=$(terraform output -raw db_instance_name 2>/dev/null)
+        DB_USER=$(terraform output -raw db_instance_username 2>/dev/null)
+        DB_SECRET_ARN=$(terraform output -raw db_credentials_secret_arn 2>/dev/null)
         
         # Get password from Secrets Manager
         DB_PASSWORD=$(aws secretsmanager get-secret-value \
