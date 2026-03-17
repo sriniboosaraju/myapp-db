@@ -3,6 +3,16 @@ output "db_instance_endpoint" {
   value       = aws_db_instance.postgres.endpoint
 }
 
+output "karpenter_node_role_arn" {
+  description = "ARN of the KarpenterNodeRole (EC2 instance role)"
+  value       = aws_iam_role.karpenter_node.arn
+}
+
+output "karpenter_controller_role_arn" {
+  description = "⭐ Annotate karpenter SA with this ARN: eks.amazonaws.com/role-arn"
+  value       = aws_iam_role.karpenter_controller.arn
+}
+
 output "db_instance_address" {
   description = "The hostname of the RDS instance"
   value       = aws_db_instance.postgres.address

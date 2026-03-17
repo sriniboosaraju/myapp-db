@@ -19,3 +19,6 @@ skip_final_snapshot     = true
 
 # Auto-deploy enabled
 
+# EKS cluster (for Karpenter IAM)
+eks_cluster_name = "eks-srini"
+
