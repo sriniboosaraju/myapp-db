@@ -6,7 +6,7 @@ permissions:
   id-token: write
 
 on:
-  # Run on app or infrastructure changes
+  # Run on app, chart, deploy or infra changes
   push:
     branches:
       - dev
@@ -84,59 +84,30 @@ jobs:
         aws-region: us-east-1
         role-session-name: GitHubActions-Deploy-${{ github.run_id }}
 
-    - name: Setup Terraform to get DB outputs
-      uses: hashicorp/setup-terraform@v3
-      with:
-        terraform_version: '1.7.0'
-        terraform_wrapper: false
-
-    - name: Check and Provision Database Addon
+    - name: Fetch DB credentials from Secrets Manager
       id: db-creds
       run: |
-        cd infra
-        terraform init \
-          -backend-config="bucket=${{ secrets.TF_STATE_BUCKET }}" \
-          -backend-config="key=myapp-db/dev/terraform.tfstate" \
-          -backend-config="region=us-east-1"
-        
-        echo "🔍 Checking database addon status..."
-        
-        # Use terraform plan to check if resources need to be created
-        # Exit codes: 0=no changes, 1=error, 2=changes needed
-        terraform plan \
-          -var-file="environments/dev.tfvars" \
-          -detailed-exitcode || PLAN_EXIT_CODE=$?
-        
-        if [ "$PLAN_EXIT_CODE" == "2" ]; then
-          echo "📦 Database addon needs provisioning. Creating resources..."
-          terraform apply -auto-approve -var-file="environments/dev.tfvars"
-          echo "✅ Database addon created successfully!"
-        elif [ "$PLAN_EXIT_CODE" == "0" ]; then
-          echo "✅ Database addon exists and is up to date."
-        else
-          echo "❌ Terraform plan failed with exit code: $PLAN_EXIT_CODE"
-          exit 1
-        fi
-        
-        # Get database credentials from Terraform state
-        DB_HOST=$(terraform output -raw db_instance_address 2>/dev/null)
-        DB_PORT=$(terraform output -raw db_instance_port 2>/dev/null)
-        DB_NAME=$(terraform output -raw db_instance_name 2>/dev/null)
-        DB_USER=$(terraform output -raw db_instance_username 2>/dev/null)
-        DB_SECRET_ARN=$(terraform output -raw db_credentials_secret_arn 2>/dev/null)
-        
-        # Get password from Secrets Manager
-        DB_PASSWORD=$(aws secretsmanager get-secret-value \
-          --secret-id "${DB_SECRET_ARN}" \
+        SECRET_NAME="myapp-db-db-dev-db-credentials"
+        echo "🔍 Fetching DB credentials from Secrets Manager: ${SECRET_NAME}"
+
+        SECRET=$(aws secretsmanager get-secret-value \
+          --secret-id "${SECRET_NAME}" \
           --query 'SecretString' \
-          --output text | jq -r '.password')
-        
+          --output text)
+
+        DB_HOST=$(echo "$SECRET" | jq -r '.host')
+        DB_PORT=$(echo "$SECRET" | jq -r '.port')
+        DB_NAME=$(echo "$SECRET" | jq -r '.dbname')
+        DB_USER=$(echo "$SECRET" | jq -r '.username')
+        DB_PASSWORD=$(echo "$SECRET" | jq -r '.password')
+
         echo "DB_HOST=${DB_HOST}" >> $GITHUB_OUTPUT
         echo "DB_PORT=${DB_PORT}" >> $GITHUB_OUTPUT
         echo "DB_NAME=${DB_NAME}" >> $GITHUB_OUTPUT
         echo "DB_USER=${DB_USER}" >> $GITHUB_OUTPUT
         echo "::add-mask::${DB_PASSWORD}"
         echo "DB_PASSWORD=${DB_PASSWORD}" >> $GITHUB_OUTPUT
+        echo "✅ DB credentials fetched successfully"
 
     - name: Update Karpenter values with real endpoint and role ARN
       run: |
@@ -146,15 +117,19 @@ jobs:
           --query 'cluster.endpoint' \
           --output text)
 
-        # Get Karpenter controller role ARN from Terraform output
-        cd infra
-        KARPENTER_ROLE_ARN=$(terraform output -raw karpenter_controller_role_arn 2>/dev/null || echo "")
-        cd ..
+        # Get Karpenter controller role ARN directly from AWS IAM
+        KARPENTER_ROLE_ARN=$(aws iam get-role \
+          --role-name KarpenterControllerRole-eks-srini \
+          --query 'Role.Arn' \
+          --output text 2>/dev/null || echo "")
 
         if [ -z "$KARPENTER_ROLE_ARN" ] || [ -z "$EKS_ENDPOINT" ]; then
-          echo "⚠️ Skipping Karpenter values update — outputs not available yet"
+          echo "⚠️ Skipping Karpenter values update — role or endpoint not available yet"
           exit 0
         fi
+
+        sudo wget -qO /usr/local/bin/yq https://github.com/mikefarah/yq/releases/latest/download/yq_linux_amd64
+        sudo chmod +x /usr/local/bin/yq
 
         echo "Updating clusterEndpoint and role ARN in charts/karpenter/values.yaml"
         yq -i ".settings.clusterEndpoint = \"${EKS_ENDPOINT}\"" charts/karpenter/values.yaml
