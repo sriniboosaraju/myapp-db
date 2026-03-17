@@ -6,7 +6,7 @@ permissions:
   id-token: write
 
 on:
-  # Run on app, chart, deploy or infra changes
+  # Run on app, chart, deploy, infra or workflow changes
   push:
     branches:
       - dev
@@ -15,6 +15,7 @@ on:
       - 'charts/**'
       - 'deploy/**'
       - 'infra/**'
+      - '.github/workflows/**'
   workflow_dispatch:  # Manual trigger
 
 jobs:
