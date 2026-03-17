@@ -1,4 +1,42 @@
 # ---------------------------------------------------------------
+# Import existing roles into Terraform state (safe to keep - ignored if not present)
+# ---------------------------------------------------------------
+import {
+  to = aws_iam_role.karpenter_node
+  id = "KarpenterNodeRole"
+}
+
+import {
+  to = aws_iam_instance_profile.karpenter_node
+  id = "KarpenterNodeRole"
+}
+
+import {
+  to = aws_iam_role.karpenter_controller
+  id = "KarpenterControllerRole-eks-srini"
+}
+
+import {
+  to = aws_iam_role_policy_attachment.karpenter_node_worker
+  id = "KarpenterNodeRole/arn:aws:iam::aws:policy/AmazonEKSWorkerNodePolicy"
+}
+
+import {
+  to = aws_iam_role_policy_attachment.karpenter_node_ecr
+  id = "KarpenterNodeRole/arn:aws:iam::aws:policy/AmazonEC2ContainerRegistryReadOnly"
+}
+
+import {
+  to = aws_iam_role_policy_attachment.karpenter_node_cni
+  id = "KarpenterNodeRole/arn:aws:iam::aws:policy/AmazonEKS_CNI_Policy"
+}
+
+import {
+  to = aws_iam_role_policy_attachment.karpenter_node_ssm
+  id = "KarpenterNodeRole/arn:aws:iam::aws:policy/AmazonSSMManagedInstanceCore"
+}
+
+# ---------------------------------------------------------------
 # Data sources
 # ---------------------------------------------------------------
 data "aws_caller_identity" "current" {}
