@@ -17,6 +17,16 @@ import {
 }
 
 import {
+  to = aws_iam_policy.karpenter_controller
+  id = "arn:aws:iam::${data.aws_caller_identity.current.account_id}:policy/KarpenterControllerPolicy-eks-srini"
+}
+
+import {
+  to = aws_iam_role_policy_attachment.karpenter_controller
+  id = "KarpenterControllerRole-eks-srini/arn:aws:iam::${data.aws_caller_identity.current.account_id}:policy/KarpenterControllerPolicy-eks-srini"
+}
+
+import {
   to = aws_iam_role_policy_attachment.karpenter_node_worker
   id = "KarpenterNodeRole/arn:aws:iam::aws:policy/AmazonEKSWorkerNodePolicy"
 }
