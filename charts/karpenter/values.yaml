@@ -1,13 +1,11 @@
 settings:
   clusterName: eks-srini
-  clusterEndpoint: https://<EKS-ENDPOINT>
-
+  clusterEndpoint: https://943D669DBB44E4CFBF30A466AD36BC2D.gr7.us-east-1.eks.amazonaws.com
 serviceAccount:
   create: true
   name: karpenter
   annotations:
-    eks.amazonaws.com/role-arn: <KARPENTER_CONTROLLER_ROLE_ARN>
-
+    eks.amazonaws.com/role-arn: arn:aws:iam::479604670156:role/KarpenterControllerRole-eks-srini
 controller:
   resources:
     requests:
