@@ -105,12 +105,11 @@ jobs:
         # Exit codes: 0=no changes, 1=error, 2=changes needed
         terraform plan \
           -var-file="environments/dev.tfvars" \
-          -detailed-exitcode \
-          -out=tfplan || PLAN_EXIT_CODE=$?
+          -detailed-exitcode || PLAN_EXIT_CODE=$?
         
         if [ "$PLAN_EXIT_CODE" == "2" ]; then
           echo "📦 Database addon needs provisioning. Creating resources..."
-          terraform apply -auto-approve tfplan
+          terraform apply -auto-approve -var-file="environments/dev.tfvars"
           echo "✅ Database addon created successfully!"
         elif [ "$PLAN_EXIT_CODE" == "0" ]; then
           echo "✅ Database addon exists and is up to date."
