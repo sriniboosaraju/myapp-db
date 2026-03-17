@@ -166,7 +166,8 @@ resource "aws_iam_policy" "karpenter_controller" {
         Effect = "Allow"
         Action = [
           "ec2:RunInstances",
-          "ec2:CreateFleet"
+          "ec2:CreateFleet",
+          "ec2:CreateLaunchTemplate"
         ]
         Resource = [
           "arn:aws:ec2:*::image/*",
