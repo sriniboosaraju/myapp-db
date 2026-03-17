@@ -6,7 +6,7 @@ permissions:
   id-token: write
 
 on:
-  # Run on app, chart, deploy, infra or workflow changes
+  # Run on app, chart, deploy, infra or this workflow's own changes
   push:
     branches:
       - dev
@@ -15,7 +15,7 @@ on:
       - 'charts/**'
       - 'deploy/**'
       - 'infra/**'
-      - '.github/workflows/**'
+      - '.github/workflows/ci-build-dev.yml'
   workflow_dispatch:  # Manual trigger
 
 jobs:
@@ -169,6 +169,12 @@ jobs:
           addon=postgres \
           --namespace=myapp-db-dev \
           --overwrite
+
+    - name: Apply platform ArgoCD Applications (Karpenter)
+      run: |
+        kubectl apply -f deploy/platform/karpenter-app.yaml -n argocd
+        kubectl apply -f deploy/platform/karpenter-resources.yaml -n argocd
+        echo "✅ Karpenter ArgoCD apps applied"
 
     - name: Deploy ArgoCD Application
       run: |
