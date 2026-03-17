@@ -53,8 +53,3 @@ output "db_subnet_group_name" {
   description = "The DB subnet group name"
   value       = aws_db_subnet_group.postgres.name
 }
-
-output "db_credentials_secret_arn" {
-  description = "ARN of the Secrets Manager secret containing database credentials"
-  value       = aws_secretsmanager_secret.db_credentials.arn
-}
