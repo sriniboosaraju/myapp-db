@@ -139,25 +139,19 @@ jobs:
         run: |
           terraform init \
             -backend-config="bucket=${{ secrets.TF_STATE_BUCKET }}" \
-            -backend-config="key=myapp-db-db/dev/terraform.tfstate" \
+            -backend-config="key=myapp-db/dev/terraform.tfstate" \
             -backend-config="region=${{ env.AWS_REGION }}"
-
-      - name: Download Plan
-        uses: actions/download-artifact@v4
-        with:
-          name: tfplan-dev
-          path: infra/
 
       - name: Terraform Apply
         env:
           TF_VAR_environment: dev
-        run: terraform apply -auto-approve tfplan-dev
+        run: terraform apply -auto-approve -var-file="environments/dev.tfvars"
 
       - name: Output Database Info
         id: db-output
         run: |
-          echo "db_endpoint=$(terraform output -raw db_instance_address)" >> $GITHUB_OUTPUT
-          echo "db_port=$(terraform output -raw db_instance_port)" >> $GITHUB_OUTPUT
+          echo "db_endpoint=$(terraform output -raw db_instance_address 2>/dev/null)" >> $GITHUB_OUTPUT
+          echo "db_port=$(terraform output -raw db_instance_port 2>/dev/null)" >> $GITHUB_OUTPUT
 
       - name: Summary
         run: |
