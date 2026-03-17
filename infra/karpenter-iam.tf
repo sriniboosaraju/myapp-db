@@ -162,80 +162,13 @@ resource "aws_iam_policy" "karpenter_controller" {
     Version = "2012-10-17"
     Statement = [
       {
-        Sid    = "AllowScopedEC2InstanceActions"
+        Sid    = "AllowEC2Actions"
         Effect = "Allow"
         Action = [
-          "ec2:RunInstances",
           "ec2:CreateFleet",
-          "ec2:CreateLaunchTemplate"
-        ]
-        Resource = [
-          "arn:aws:ec2:*::image/*",
-          "arn:aws:ec2:*::snapshot/*",
-          "arn:aws:ec2:*:*:spot-instances-request/*",
-          "arn:aws:ec2:*:*:security-group/*",
-          "arn:aws:ec2:*:*:subnet/*",
-          "arn:aws:ec2:*:*:launch-template/*",
-          "arn:aws:ec2:*:*:network-interface/*",
-          "arn:aws:ec2:*:*:volume/*"
-        ]
-      },
-      {
-        Sid    = "AllowScopedEC2InstanceActionsWithTags"
-        Effect = "Allow"
-        Action = [
-          "ec2:RunInstances",
-          "ec2:CreateFleet",
-          "ec2:CreateLaunchTemplate"
-        ]
-        Resource = [
-          "arn:aws:ec2:*:*:fleet/*",
-          "arn:aws:ec2:*:*:instance/*"
-        ]
-        Condition = {
-          StringEquals = {
-            "aws:RequestTag/karpenter.sh/discovery" = var.eks_cluster_name
-          }
-        }
-      },
-      {
-        Sid    = "AllowScopedResourceCreationTagging"
-        Effect = "Allow"
-        Action = "ec2:CreateTags"
-        Resource = [
-          "arn:aws:ec2:*:*:fleet/*",
-          "arn:aws:ec2:*:*:instance/*",
-          "arn:aws:ec2:*:*:launch-template/*",
-          "arn:aws:ec2:*:*:volume/*",
-          "arn:aws:ec2:*:*:network-interface/*"
-        ]
-        Condition = {
-          StringEquals = {
-            "ec2:CreateAction" = ["RunInstances", "CreateFleet", "CreateLaunchTemplate"]
-          }
-        }
-      },
-      {
-        Sid    = "AllowScopedDeletion"
-        Effect = "Allow"
-        Action = [
-          "ec2:TerminateInstances",
-          "ec2:DeleteLaunchTemplate"
-        ]
-        Resource = [
-          "arn:aws:ec2:*:*:instance/*",
-          "arn:aws:ec2:*:*:launch-template/*"
-        ]
-        Condition = {
-          StringEquals = {
-            "aws:ResourceTag/karpenter.sh/discovery" = var.eks_cluster_name
-          }
-        }
-      },
-      {
-        Sid    = "AllowRegionalReadActions"
-        Effect = "Allow"
-        Action = [
+          "ec2:CreateLaunchTemplate",
+          "ec2:CreateTags",
+          "ec2:DeleteLaunchTemplate",
           "ec2:DescribeAvailabilityZones",
           "ec2:DescribeImages",
           "ec2:DescribeInstances",
@@ -244,24 +177,26 @@ resource "aws_iam_policy" "karpenter_controller" {
           "ec2:DescribeLaunchTemplates",
           "ec2:DescribeSecurityGroups",
           "ec2:DescribeSpotPriceHistory",
-          "ec2:DescribeSubnets"
+          "ec2:DescribeSubnets",
+          "ec2:RunInstances",
+          "ec2:TerminateInstances"
         ]
         Resource = "*"
       },
       {
-        Sid      = "AllowPricingReadActions"
+        Sid      = "AllowPricingActions"
         Effect   = "Allow"
         Action   = "pricing:GetProducts"
         Resource = "*"
       },
       {
-        Sid      = "AllowSSMReadActions"
+        Sid      = "AllowSSMActions"
         Effect   = "Allow"
         Action   = "ssm:GetParameter"
         Resource = "arn:aws:ssm:*:*:parameter/aws/service/*"
       },
       {
-        Sid    = "AllowInterruptionQueueActions"
+        Sid    = "AllowSQSActions"
         Effect = "Allow"
         Action = [
           "sqs:DeleteMessage",
@@ -271,61 +206,26 @@ resource "aws_iam_policy" "karpenter_controller" {
         Resource = "arn:aws:sqs:*:${data.aws_caller_identity.current.account_id}:${var.eks_cluster_name}"
       },
       {
-        Sid    = "AllowPassingInstanceRole"
-        Effect = "Allow"
-        Action = "iam:PassRole"
-        Resource = aws_iam_role.karpenter_node.arn
-        Condition = {
-          StringEquals = {
-            "iam:PassedToService" = "ec2.amazonaws.com"
-          }
-        }
-      },
-      {
-        Sid      = "AllowScopedInstanceProfileCreationActions"
+        Sid      = "AllowPassRole"
         Effect   = "Allow"
-        Action   = "iam:CreateInstanceProfile"
-        Resource = "*"
-        Condition = {
-          StringEquals = {
-            "aws:RequestTag/kubernetes.io/cluster/${var.eks_cluster_name}" = "owned"
-          }
-        }
+        Action   = "iam:PassRole"
+        Resource = aws_iam_role.karpenter_node.arn
       },
       {
-        Sid    = "AllowScopedInstanceProfileTagActions"
-        Effect = "Allow"
-        Action = "iam:TagInstanceProfile"
-        Resource = "*"
-        Condition = {
-          StringEquals = {
-            "aws:ResourceTag/kubernetes.io/cluster/${var.eks_cluster_name}" = "owned"
-          }
-        }
-      },
-      {
-        Sid    = "AllowScopedInstanceProfileActions"
+        Sid    = "AllowIAMInstanceProfile"
         Effect = "Allow"
         Action = [
           "iam:AddRoleToInstanceProfile",
+          "iam:CreateInstanceProfile",
+          "iam:DeleteInstanceProfile",
+          "iam:GetInstanceProfile",
           "iam:RemoveRoleFromInstanceProfile",
-          "iam:DeleteInstanceProfile"
+          "iam:TagInstanceProfile"
         ]
         Resource = "*"
-        Condition = {
-          StringEquals = {
-            "aws:ResourceTag/kubernetes.io/cluster/${var.eks_cluster_name}" = "owned"
-          }
-        }
       },
       {
-        Sid      = "AllowInstanceProfileReadActions"
-        Effect   = "Allow"
-        Action   = "iam:GetInstanceProfile"
-        Resource = "*"
-      },
-      {
-        Sid      = "AllowAPIServerEndpointDiscovery"
+        Sid      = "AllowEKSDescribe"
         Effect   = "Allow"
         Action   = "eks:DescribeCluster"
         Resource = "arn:aws:eks:*:${data.aws_caller_identity.current.account_id}:cluster/${var.eks_cluster_name}"
