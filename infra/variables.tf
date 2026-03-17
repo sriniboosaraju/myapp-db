@@ -75,3 +75,9 @@ variable "skip_final_snapshot" {
   type        = bool
   default     = false
 }
+
+variable "eks_cluster_name" {
+  description = "Name of the EKS cluster (used for Karpenter IAM)"
+  type        = string
+  default     = "eks-srini"
+}

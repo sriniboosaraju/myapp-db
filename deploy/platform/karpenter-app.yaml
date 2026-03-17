@@ -1,0 +1,29 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: karpenter
+  namespace: argocd
+spec:
+  project: default
+
+  sources:
+    - repoURL: https://charts.karpenter.sh
+      chart: karpenter
+      targetRevision: v0.37.0
+      helm:
+        valueFiles:
+          - $values/charts/karpenter/values.yaml
+    - repoURL: https://github.com/sriniboosaraju/myapp-db
+      targetRevision: HEAD
+      ref: values
+
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: karpenter
+
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true

@@ -25,8 +25,8 @@ resource "aws_iam_role" "github_actions" {
             "token.actions.githubusercontent.com:aud" = "sts.amazonaws.com"
           }
           StringLike = {
-            # GitHub repository: sriniboosaraju/myapp-db-db
-            "token.actions.githubusercontent.com:sub" = "repo:sriniboosaraju/myapp-db-db:*"
+            # GitHub repository: sriniboosaraju/myapp-db
+            "token.actions.githubusercontent.com:sub" = "repo:sriniboosaraju/myapp-db:*"
           }
         }
       }

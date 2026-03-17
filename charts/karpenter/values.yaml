@@ -1,0 +1,15 @@
+settings:
+  clusterName: eks-srini
+  clusterEndpoint: https://<EKS-ENDPOINT>
+
+serviceAccount:
+  create: true
+  name: karpenter
+  annotations:
+    eks.amazonaws.com/role-arn: <KARPENTER_CONTROLLER_ROLE_ARN>
+
+controller:
+  resources:
+    requests:
+      cpu: 500m
+      memory: 512Mi
