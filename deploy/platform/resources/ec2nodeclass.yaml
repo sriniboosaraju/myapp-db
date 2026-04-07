@@ -14,4 +14,4 @@ spec:
         karpenter.sh/discovery: eks-srini
 
   amiSelectorTerms:
-    - alias: al2@latest
+    - alias: al2023@latest
